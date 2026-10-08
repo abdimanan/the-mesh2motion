@@ -1,6 +1,6 @@
 # Animation Lab: a Mesh2Motion animation library add-on for Blender
 
-**Status:** In progress: AL1 done ([AL1](AL1-build-animation-library.md)), AL2 done ([AL2](AL2-thumbnails.md)); AL3 (add-on skeleton) next
+**Status:** In progress: AL1 done ([AL1](AL1-build-animation-library.md)), AL2 done ([AL2](AL2-thumbnails.md)), AL3 done ([AL3](AL3-addon-skeleton.md)); AL4 (browser UI) next
 **Date:** 2026-10-08
 **Related:** [Mixamo FBX download for Blender](../../mesh2motion-app/docs/download%20animation%20as%20mixamo%20bone%20rig/) (the feature built before this)
 

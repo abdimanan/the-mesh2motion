@@ -1,0 +1,24 @@
+schema_version = "1.0.0"
+
+id = "animation_lab"
+version = "0.1.0"
+name = "Animation Lab"
+tagline = "Browse and apply the Mesh2Motion animation library"
+maintainer = "abdimanan"
+type = "add-on"
+website = "https://github.com/abdimanan/the-mesh2motion"
+
+tags = ["Animation", "Rigging"]
+
+# the library's actions use the slotted action format introduced in Blender 4.4
+blender_version_min = "4.4.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+copyright = ["2026 abdimanan"]
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "*.blend1",
+]

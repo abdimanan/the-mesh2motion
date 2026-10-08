@@ -121,6 +121,8 @@ def setup_render(scene):
     render.film_transparent = True
     render.image_settings.file_format = "PNG"
     render.image_settings.color_mode = "RGBA"
+    # lossless; only makes the files smaller, at the cost of a slower write
+    render.image_settings.compression = 100
 
     shading = scene.display.shading
     shading.light = "STUDIO"

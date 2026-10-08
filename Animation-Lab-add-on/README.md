@@ -2,21 +2,35 @@
 
 A Blender add-on that brings the [Mesh2Motion](https://mesh2motion.org/) animation library into Blender: browse the animations, import a rig, and apply animations to an armature or push them into the NLA Editor.
 
-**Status:** AL1 (animation library) and AL2 (thumbnails) done. The add-on itself (panels, buttons) comes in AL3–AL5. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
+**Status:** AL1 (library), AL2 (thumbnails) and AL3 (installable add-on with its sidebar tab) done. Browsing and applying animations come in AL4–AL5. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
 
 ## Folder layout
 
 ```
 Animation-Lab-add-on/
-├── animation_lab/            the add-on package
+├── animation_lab/            the add-on package (what Blender installs)
+│   ├── blender_manifest.toml
+│   ├── __init__.py, ui.py, properties.py, preferences.py, operators.py, previews.py, library.py
 │   └── library/              built by tools/build_library (not in git)
 │       ├── <skeleton>.blend  one rig + all its animations as actions, marked as assets
 │       ├── catalog.json      one entry per animation
 │       ├── thumbnails/       256x256 PNG per animation and per rig
 │       └── blender_assets.cats.txt
 ├── tools/build_library/      builds the library from mesh2motion-app/static
+├── tools/package_addon.sh    builds dist/animation_lab-<version>.zip
+├── dist/                     the installable zip (not in git)
 └── tests/                    run inside Blender
 ```
+
+## Install in Blender
+
+Needs Blender 4.4 or newer.
+
+```bash
+tools/package_addon.sh        # builds the library and dist/animation_lab-0.1.0.zip (about 45 MB)
+```
+
+Then in Blender: drag the zip into the Blender window, or *Edit → Preferences → Get Extensions → ⌄ (top right) → Install from Disk…*. Open the 3D Viewport sidebar (**N**) and pick the **Animation Lab** tab.
 
 ## Build the library
 
@@ -33,7 +47,9 @@ Blender is found from `$BLENDER`, then `blender` on the PATH, then `/Application
 ## Test
 
 ```bash
-tests/run_tests.sh
+tests/run_tests.sh          # the library (inside Blender)
+tests/run_addon_tests.sh    # packages the add-on, installs it into a throwaway Blender user
+                            # folder and tests the installed copy; your own Blender is not touched
 ```
 
 The tests check that every clip of the web app is in the library, that each library holds only a clean rig, that every action is ready to use, that the catalog is valid, that the motion matches the web app (every joint within a quarter of a millimetre), and that every thumbnail shows the whole model.

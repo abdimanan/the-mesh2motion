@@ -5,3 +5,4 @@ animation_lab/library/catalog.json
 animation_lab/library/blender_assets.cats.txt
 __pycache__/
 animation_lab/library/thumbnails/
+dist/
