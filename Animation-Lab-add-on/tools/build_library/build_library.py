@@ -128,6 +128,17 @@ def max_rest_offset(rig, other_armature):
     return offset
 
 
+def remove_import_leftovers():
+    """Everything the imports and renders brought in that the library does not need."""
+    # the glTF importer files objects it skips under an empty collection of this name
+    for collection in [collection for collection in bpy.data.collections if collection.name.startswith("glTF_not_exported")]:
+        bpy.data.collections.remove(collection)
+    for image in [image for image in bpy.data.images if image.type == "RENDER_RESULT"]:
+        bpy.data.images.remove(image)
+    # meshes, materials and images nothing uses any more
+    bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+
+
 def catalog_uuid(path):
     return str(uuid.uuid5(CATALOG_UUID_NAMESPACE, path))
 
@@ -171,6 +182,8 @@ def build_skeleton(skeleton, static_dir, out_dir, rules, catalog_paths, work_dir
         patch = patch_animation_glb(source, rig_path, patched, skeleton.position_bone)
         if patch["rests_changed"]:
             report["notes"].append(f"{animation_pack.file}: {patch['rests_changed']} joints put on the rig's rest pose")
+        if patch["duplicates_dropped"]:
+            report["notes"].append(f"{animation_pack.file}: {patch['duplicates_dropped']} duplicate channels dropped")
         imported_objects, imported_actions = import_glb(patched)
         imported_armature = only_armature(imported_objects, animation_pack.file)
 
@@ -239,8 +252,7 @@ def build_skeleton(skeleton, static_dir, out_dir, rules, catalog_paths, work_dir
 
         remove_objects(imported_objects)
 
-    # everything the imports brought in that nothing uses any more: meshes, materials, images
-    bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+    remove_import_leftovers()
 
     # the library opens at the rate most of its clips were made at
     set_scene_fps(max(clips_per_fps, key=clips_per_fps.get))
@@ -299,33 +311,54 @@ def main():
     try:
         for skeleton in skeletons:
             entries, report = build_skeleton(skeleton, static_dir, out_dir, rules, catalog_paths, work_dir)
-            animations += sorted(entries, key=lambda entry: entry["name"].lower())
+            animations += entries
             reports.append(report)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+    skeleton_entries = [
+        {
+            "key": skeleton.key,
+            "display_name": skeleton.display_name,
+            "rig": skeleton.rig_name,
+            "blend_file": skeleton.blend_file,
+            "bones": report["bones"],
+            "animations": report["actions"],
+            "thumbnail": None,
+        }
+        for skeleton, report in zip(skeletons, reports)
+    ]
+
+    # a partial build (--only) keeps the other skeletons' entries from the existing catalog
+    catalog_path = os.path.join(out_dir, "catalog.json")
+    built = {skeleton.key for skeleton in skeletons}
+    if wanted and os.path.exists(catalog_path):
+        with open(catalog_path, encoding="utf-8") as catalog_file:
+            previous = json.load(catalog_file)
+        skeleton_entries += [entry for entry in previous["skeletons"] if entry["key"] not in built]
+        animations += [entry for entry in previous["animations"] if entry["skeleton"] not in built]
+
+    order = {skeleton.key: index for index, skeleton in enumerate(SKELETONS)}
+    skeleton_entries.sort(key=lambda entry: order[entry["key"]])
+    animations.sort(key=lambda entry: (order[entry["skeleton"]], entry["name"].lower()))
 
     catalog = {
         "format_version": CATALOG_FORMAT_VERSION,
         "license": "CC0-1.0",
         "source": "Mesh2Motion (mesh2motion-app/static)",
-        "skeletons": [
-            {
-                "key": skeleton.key,
-                "display_name": skeleton.display_name,
-                "rig": skeleton.rig_name,
-                "blend_file": skeleton.blend_file,
-                "bones": report["bones"],
-                "animations": report["actions"],
-            }
-            for skeleton, report in zip(skeletons, reports)
-        ],
+        "skeletons": skeleton_entries,
         "animations": animations,
     }
 
-    with open(os.path.join(out_dir, "catalog.json"), "w", encoding="utf-8") as catalog_file:
+    with open(catalog_path, "w", encoding="utf-8") as catalog_file:
         json.dump(catalog, catalog_file, indent=2, ensure_ascii=False)
         catalog_file.write("\n")
-    write_asset_catalogs(out_dir, catalog_paths)
+
+    # asset catalogs for every skeleton in the catalog, not only the ones just built
+    display_names = {skeleton.key: skeleton.display_name for skeleton in SKELETONS}
+    all_paths = {f"{ROOT_CATALOG}/{display_names[entry['key']]}" for entry in skeleton_entries}
+    all_paths |= {f"{ROOT_CATALOG}/{display_names[entry['skeleton']]}/{entry['category']}" for entry in animations}
+    write_asset_catalogs(out_dir, all_paths)
 
     # summary
     print("\n=== Animation Lab library build ===")

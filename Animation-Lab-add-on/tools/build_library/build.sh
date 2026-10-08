@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the Animation Lab library (.blend files + catalog.json) from the Mesh2Motion web app.
+# Builds the Animation Lab library (.blend files + catalog.json + thumbnails) from the Mesh2Motion web app.
 #
 #   tools/build_library/build.sh            # all skeletons
 #   tools/build_library/build.sh human,fox  # only these
@@ -26,3 +26,10 @@ fi
 "$BLENDER_BIN" -b --factory-startup --python-exit-code 1 \
   --python "$HERE/build_library.py" -- \
   --static "$STATIC_DIR" --out "$OUT_DIR" --only "${1:-}"
+
+# thumbnails need the library, so they run as a second step. SKIP_THUMBNAILS=1 skips them.
+if [[ "${SKIP_THUMBNAILS:-0}" != "1" ]]; then
+  "$BLENDER_BIN" -b --factory-startup --python-exit-code 1 \
+    --python "$HERE/render_thumbnails.py" -- \
+    --static "$STATIC_DIR" --library "$OUT_DIR" --only "${1:-}"
+fi

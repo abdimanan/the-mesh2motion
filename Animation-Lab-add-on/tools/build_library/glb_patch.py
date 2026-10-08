@@ -134,18 +134,39 @@ def patch_animation_glb(animation_path, rig_path, out_path, position_bone):
             rests_changed += 1
 
     channels_dropped = 0
+    duplicates_dropped = 0
     nodes = document.get("nodes", [])
     for animation in document.get("animations", []):
         clip_name = animation.get("name", "")
         kept = []
+        targets = set()
         for channel in animation["channels"]:
             target = channel["target"]
             node_name = nodes[target["node"]].get("name", "") if "node" in target else ""
+            # a clip can list the same bone and property twice (human base Sword_Regular_C_RM
+            # lists every channel twice, pointing at the same keys). Keep the first.
+            if (node_name, target["path"]) in targets:
+                duplicates_dropped += 1
+                continue
             if node_name in rig_joint_names and kept_channel(target["path"], node_name, clip_name, position_bone, root_bone):
                 kept.append(channel)
+                targets.add((node_name, target["path"]))
             else:
                 channels_dropped += 1
         animation["channels"] = kept
 
     _write(out_path, document, binary_chunk)
-    return {"rests_changed": rests_changed, "channels_dropped": channels_dropped, "root_bone": root_bone}
+    return {"rests_changed": rests_changed, "channels_dropped": channels_dropped,
+            "duplicates_dropped": duplicates_dropped, "root_bone": root_bone}
+
+
+def write_model_only_glb(path, out_path):
+    """Writes a copy of the GLB without its animations: just the model, armature and textures.
+
+    Importing a GLB that has animations into a file that already holds actions of the same
+    names makes Blender's glTF importer write into those actions.
+    """
+    document, binary_chunk = _read(path)
+    document.pop("animations", None)
+    _write(out_path, document, binary_chunk)
+

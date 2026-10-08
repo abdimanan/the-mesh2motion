@@ -14,6 +14,7 @@ import sys
 import unittest
 
 import bpy
+import numpy
 from mathutils import Matrix, Quaternion, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -36,6 +37,11 @@ EXPECTED_TOTAL_CLIPS = 251
 JOINT_TOLERANCE = 0.00025
 MOTION_SAMPLE_CLIPS_PER_PACK = 4
 MOTION_SAMPLE_FRAMES_PER_CLIP = 4
+THUMBNAIL_SIZE = 256
+# a thumbnail has to show the model: at least this share of its pixels visible...
+MIN_THUMBNAIL_COVERAGE = 0.03
+# ...and not cut off: pixels on the image border at most this opaque
+MAX_BORDER_ALPHA = 0.05
 
 
 def load_catalog():
@@ -207,10 +213,11 @@ class TestLibrary(unittest.TestCase):
 
             self.assertEqual([obj.type for obj in bpy.data.objects], ["ARMATURE"], skeleton.key)
             self.assertEqual(len(rig.data.bones), len(rig_glb.joint_names()), skeleton.key)
-            self.assertEqual(len(bpy.data.meshes), 0, skeleton.key)
-            self.assertEqual(len(bpy.data.images), 0, skeleton.key)
-            self.assertEqual(len(bpy.data.materials), 0, skeleton.key)
+            for leftovers in ("meshes", "images", "materials", "cameras", "collections", "textures"):
+                self.assertEqual(len(getattr(bpy.data, leftovers)), 0, f"{skeleton.key}: {leftovers} left in the library")
+            self.assertIsNone(rig.animation_data, f"{skeleton.key}: the rig should not have an action assigned")
             self.assertIsNotNone(rig.asset_data, f"{skeleton.key}: rig is not marked as an asset")
+            self.assertEqual(tuple(rig.preview.image_size), (THUMBNAIL_SIZE, THUMBNAIL_SIZE), f"{skeleton.key}: rig preview")
 
     def test_actions_are_ready_to_use(self):
         catalog_ids = self.asset_catalog_ids()
@@ -227,6 +234,8 @@ class TestLibrary(unittest.TestCase):
                 self.assertIsNotNone(action.asset_data, label)
                 self.assertIn(action.asset_data.catalog_id, catalog_ids, label)
                 self.assertEqual(action["animation_lab_fps"], entry["fps"], label)
+                self.assertIsNotNone(action.preview, f"{label}: no asset preview")
+                self.assertEqual(tuple(action.preview.image_size), (THUMBNAIL_SIZE, THUMBNAIL_SIZE), label)
 
                 start, end = action.frame_range
                 self.assertAlmostEqual(start, round(start), places=3, msg=label)
@@ -293,9 +302,33 @@ class TestLibrary(unittest.TestCase):
                 self.assertNotEqual(entry["category"], rules["fallback"], f"{entry['id']} has no category rule")
                 self.assertGreaterEqual(entry["frame_end"], entry["frame_start"])
                 self.assertEqual(entry["root_motion"], entry["name"].lower().endswith("rm"))
-                self.assertIsNone(entry["thumbnail"])  # filled in by AL2
+                self.assertTrue(os.path.isfile(os.path.join(LIBRARY_DIR, entry["thumbnail"])), entry["id"])
                 if entry["app_preview_video"] is not None:
                     self.assertTrue(os.path.isfile(os.path.join(STATIC_DIR, "animpreviews", entry["app_preview_video"])))
+
+    def test_thumbnails_show_the_model(self):
+        paths = [entry["thumbnail"] for entry in self.catalog["animations"]]
+        paths += [entry["thumbnail"] for entry in self.catalog["skeletons"]]
+        self.assertEqual(len(paths), EXPECTED_TOTAL_CLIPS + len(SKELETONS))
+
+        lowest_coverage = 1.0
+        for relative_path in paths:
+            image = bpy.data.images.load(os.path.join(LIBRARY_DIR, relative_path))
+            self.assertEqual(tuple(image.size), (THUMBNAIL_SIZE, THUMBNAIL_SIZE), relative_path)
+            self.assertEqual(image.channels, 4, f"{relative_path}: needs a transparent background")
+
+            pixels = numpy.empty(THUMBNAIL_SIZE * THUMBNAIL_SIZE * 4, dtype=numpy.float32)
+            image.pixels.foreach_get(pixels)
+            alpha = pixels.reshape(THUMBNAIL_SIZE, THUMBNAIL_SIZE, 4)[:, :, 3]
+            bpy.data.images.remove(image)
+
+            coverage = float((alpha > 0.5).mean())
+            lowest_coverage = min(lowest_coverage, coverage)
+            border = numpy.concatenate([alpha[0], alpha[-1], alpha[:, 0], alpha[:, -1]])
+            self.assertGreater(coverage, MIN_THUMBNAIL_COVERAGE, f"{relative_path}: the model barely shows")
+            self.assertLess(float(border.max()), MAX_BORDER_ALPHA, f"{relative_path}: the model is cut off at the edge")
+
+        print(f"\n  thumbnails: {len(paths)} checked, smallest model coverage {lowest_coverage:.1%}")
 
     @staticmethod
     def asset_catalog_ids():

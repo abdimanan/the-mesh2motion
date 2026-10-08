@@ -1,6 +1,6 @@
 # AL1: Build the animation library
 
-**Status:** ✅ Done (not committed yet)
+**Status:** ✅ Done
 **Date:** 2026-10-08
 **Feasibility study:** [00-animation-lab-feasibility.md](00-animation-lab-feasibility.md)
 
