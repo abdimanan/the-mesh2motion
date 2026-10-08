@@ -4,11 +4,13 @@ selected animation and the skeleton."""
 import bpy
 from bpy.types import Panel
 
-from . import apply, library, preferences, previews, properties
+from . import apply, library, preferences, preview, previews, properties
 from .operators import (
     ANIMLAB_OT_apply_animation,
     ANIMLAB_OT_change_page,
     ANIMLAB_OT_import_rig,
+    ANIMLAB_OT_preview_start,
+    ANIMLAB_OT_preview_stop,
     ANIMLAB_OT_reload_library,
     ANIMLAB_OT_select_animation,
 )
@@ -111,7 +113,17 @@ class ANIMLAB_PT_selection(AnimationLabPanel, Panel):
         draw_apply_controls(layout, context, entry, state)
 
 
+def draw_preview_controls(layout):
+    if preview.is_active():
+        playing_on = "a temporary rig" if preview.is_temporary_rig() else preview.target().name
+        layout.label(text=f"Previewing on {playing_on}", icon="PLAY")
+        layout.operator(ANIMLAB_OT_preview_stop.bl_idname, icon="CANCEL")
+    else:
+        layout.operator(ANIMLAB_OT_preview_start.bl_idname, icon="PLAY")
+
+
 def draw_apply_controls(layout, context, entry, state):
+    draw_preview_controls(layout)
     box = layout.box()
     armature = context.active_object if context.active_object and context.active_object.type == "ARMATURE" else None
     if armature is None:

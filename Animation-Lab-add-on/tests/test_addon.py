@@ -15,7 +15,7 @@ import unittest
 
 import addon_utils
 import bpy
-from mathutils import Vector
+from mathutils import Quaternion, Vector
 
 MODULE = "bl_ext.user_default.animation_lab"
 EXPECTED_ANIMATIONS = 251
@@ -255,6 +255,9 @@ class TestInstalledAddon(unittest.TestCase):
     # --- AL5: importing rigs and applying animations -------------------------------------
 
     def clean_scene(self):
+        preview = importlib.import_module(MODULE + ".preview")
+        if preview.is_active():
+            preview.stop(bpy.context)
         for obj in list(bpy.data.objects):
             bpy.data.objects.remove(obj)
         for action in list(bpy.data.actions):
@@ -427,6 +430,115 @@ class TestInstalledAddon(unittest.TestCase):
         self.assertIn(("set", "mode", "NLA"), calls)
         self.assertIn(("prop", "mirror"), calls)
 
+    # --- AL6: previewing in the viewport ---------------------------------------------------
+
+    def preview(self):
+        return importlib.import_module(MODULE + ".preview")
+
+    def test_preview_on_a_matching_armature_puts_everything_back(self):
+        self.clean_scene()
+        scene = bpy.context.scene
+        rig = self.import_rig()
+        user_pose = Quaternion((0.9, 0.1, 0.3, 0.0)).normalized()  # a pose the user set
+        rig.pose.bones["upperarm_l"].rotation_quaternion = user_pose
+        scene.use_preview_range = True  # Blender only keeps a set preview range reliably while it is on
+        scene.frame_preview_start, scene.frame_preview_end = 5, 60
+        scene.use_preview_range = False
+        scene.frame_current = 7
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+
+        self.assertEqual(bpy.ops.animation_lab.preview_start(), {"FINISHED"})
+        self.assertTrue(self.preview().is_active())
+        self.assertEqual(self.preview().target(), rig, "plays on the user's armature")
+        self.assertEqual(rig.animation_data.action.name, "Walk")
+        self.assertTrue(scene.use_preview_range)
+        self.assertEqual((scene.frame_preview_start, scene.frame_preview_end), (0, 40), "loops the clip")
+
+        self.assertEqual(bpy.ops.animation_lab.preview_stop(), {"FINISHED"})
+        self.assertFalse(self.preview().is_active())
+        self.assertIsNone(rig.animation_data, "the rig had no animation before")
+        self.assertLess(rig.pose.bones["upperarm_l"].rotation_quaternion.rotation_difference(user_pose).angle, 1e-5)
+        self.assertFalse(scene.use_preview_range)
+        self.assertEqual((scene.frame_preview_start, scene.frame_preview_end), (5, 60))
+        self.assertEqual(scene.frame_current, 7)
+
+    def test_preview_gives_back_the_previous_action(self):
+        self.clean_scene()
+        rig = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/jog")
+        self.apply_selected()
+        jog = rig.animation_data.action
+
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        bpy.ops.animation_lab.preview_start()
+        self.assertEqual(rig.animation_data.action.name, "Walk")
+        bpy.ops.animation_lab.preview_stop()
+        self.assertEqual(rig.animation_data.action, jog)
+        self.assertIsNotNone(rig.animation_data.action_slot)
+
+    def test_preview_without_an_armature_uses_a_temporary_rig(self):
+        self.clean_scene()
+        bpy.context.view_layer.objects.active = None
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+
+        bpy.ops.animation_lab.preview_start()
+        temporary = self.preview().target()
+        self.assertTrue(self.preview().is_temporary_rig())
+        self.assertTrue(temporary.get("animation_lab_preview"))
+        self.assertTrue(temporary.show_in_front)
+        name, armature_data = temporary.name, temporary.data.name
+
+        bpy.ops.animation_lab.preview_stop()
+        self.assertNotIn(name, bpy.data.objects, "the temporary rig is removed")
+        self.assertNotIn(armature_data, bpy.data.armatures)
+
+    def test_clicking_another_animation_switches_the_preview(self):
+        self.clean_scene()
+        rig = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        bpy.ops.animation_lab.preview_start()
+        bpy.ops.animation_lab.select_animation(animation_id="human/jog")
+        self.assertTrue(self.preview().is_active())
+        self.assertEqual(rig.animation_data.action.name, "Jog")
+        self.assertEqual(self.preview().animation_id(), "human/jog")
+
+        bpy.context.window_manager.animation_lab.mirror = True
+        bpy.ops.animation_lab.preview_start()
+        self.assertEqual(rig.animation_data.action.name, "Jog (mirrored)")
+        bpy.ops.animation_lab.preview_stop()
+
+    def test_apply_ends_the_preview_and_keeps_the_animation(self):
+        self.clean_scene()
+        rig = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        bpy.ops.animation_lab.preview_start()
+        self.apply_selected()
+        self.assertFalse(self.preview().is_active())
+        self.assertEqual(rig.animation_data.action.name, "Walk", "not undone by the preview stopping")
+
+    def test_preview_stops_before_saving(self):
+        self.clean_scene()
+        bpy.context.view_layer.objects.active = None
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        bpy.ops.animation_lab.preview_start()
+        name = self.preview().target().name
+        self.preview()._stop_before_save()
+        self.assertFalse(self.preview().is_active())
+        self.assertNotIn(name, bpy.data.objects)
+
+    def test_preview_controls_in_the_panel(self):
+        self.clean_scene()
+        self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        calls = draw(self, bpy.types.ANIMLAB_PT_selection.draw)
+        self.assertIn(("operator", "animation_lab.preview_start", None), calls)
+
+        bpy.ops.animation_lab.preview_start()
+        calls = draw(self, bpy.types.ANIMLAB_PT_selection.draw)
+        self.assertIn(("label", "Previewing on Human Rig"), calls)
+        self.assertIn(("operator", "animation_lab.preview_stop", None), calls)
+        bpy.ops.animation_lab.preview_stop()
+
     def test_panel_draws_without_a_library(self):
         library = self.library
         real_folder = library.LIBRARY_DIR
@@ -442,7 +554,14 @@ class TestInstalledAddon(unittest.TestCase):
         self.assertIsNone(library.load_error())
 
     def test_disable_and_enable_again(self):
+        # a running preview on a temporary rig is cleaned up when the add-on is disabled
+        bpy.context.view_layer.objects.active = None
+        bpy.context.window_manager.animation_lab.selected = "human/walk"
+        bpy.ops.animation_lab.preview_start()
+        temporary_name = importlib.import_module(MODULE + ".preview").target().name
+
         addon_utils.disable(MODULE, default_set=True)
+        self.assertNotIn(temporary_name, bpy.data.objects)
         self.assertFalse(hasattr(bpy.types, "ANIMLAB_PT_library"))
         self.assertFalse(hasattr(bpy.context.window_manager, "animation_lab"))
 

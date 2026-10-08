@@ -5,10 +5,11 @@ skeleton, catalog.json and thumbnails) ships inside the add-on, in library/, and
 from the Mesh2Motion web app by tools/build_library/build.sh.
 """
 
-from . import operators, preferences, previews, properties, ui
+from . import operators, preferences, preview, previews, properties, ui
 
-# registered in this order, unregistered in reverse
-_MODULES = (preferences, properties, operators, ui)
+# registered in this order, unregistered in reverse (so a running preview is stopped while
+# the operators and properties it uses still exist)
+_MODULES = (preferences, properties, operators, ui, preview)
 
 
 def register():

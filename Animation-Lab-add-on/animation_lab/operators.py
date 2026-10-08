@@ -4,7 +4,7 @@ import bpy
 from bpy.props import EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 
-from . import apply, library, preferences, previews, properties
+from . import apply, library, preferences, preview, previews, properties
 
 
 class ANIMLAB_OT_reload_library(Operator):
@@ -49,7 +49,12 @@ class ANIMLAB_OT_select_animation(Operator):
         if library.animation(self.animation_id) is None:
             self.report({"WARNING"}, f"Unknown animation {self.animation_id!r}")
             return {"CANCELLED"}
-        context.window_manager.animation_lab.selected = self.animation_id
+        state = context.window_manager.animation_lab
+        state.selected = self.animation_id
+        if preview.is_active():
+            # clicking another animation while previewing plays that one instead
+            preview.switch(context, library.animation(self.animation_id), state.mirror,
+                           preferences.get(context).match_scene_fps)
         return {"FINISHED"}
 
 
@@ -123,6 +128,9 @@ class ANIMLAB_OT_apply_animation(Operator):
     def execute(self, context):
         state = context.window_manager.animation_lab
         entry = library.animation(state.selected)
+
+        # the preview would put the armature's old action back over this one when it stops
+        preview.stop(context)
         armature = context.active_object
 
         match = apply.compatibility(armature, library.skeleton(entry["skeleton"]))
@@ -145,12 +153,54 @@ class ANIMLAB_OT_apply_animation(Operator):
         return {"FINISHED"}
 
 
+class ANIMLAB_OT_preview_start(Operator):
+    """Play the selected animation in the viewport: on the active armature when it matches,
+    otherwise on a temporary rig at the 3D cursor"""
+
+    bl_idname = "animation_lab.preview_start"
+    bl_label = "Preview"
+    bl_options = {"INTERNAL"}
+
+    @classmethod
+    def poll(cls, context):
+        if library.animation(context.window_manager.animation_lab.selected) is None:
+            cls.poll_message_set("Select an animation first")
+            return False
+        return context.mode == "OBJECT"
+
+    def execute(self, context):
+        state = context.window_manager.animation_lab
+        armature = preview.start(context, library.animation(state.selected), state.mirror,
+                                 preferences.get(context).match_scene_fps)
+        where = "a temporary rig" if preview.is_temporary_rig() else armature.name
+        self.report({"INFO"}, f"Previewing on {where}. Stop Preview puts everything back.")
+        return {"FINISHED"}
+
+
+class ANIMLAB_OT_preview_stop(Operator):
+    """Stop the preview and put back what it changed"""
+
+    bl_idname = "animation_lab.preview_stop"
+    bl_label = "Stop Preview"
+    bl_options = {"INTERNAL"}
+
+    @classmethod
+    def poll(cls, context):
+        return preview.is_active()
+
+    def execute(self, context):
+        preview.stop(context)
+        return {"FINISHED"}
+
+
 CLASSES = (
     ANIMLAB_OT_reload_library,
     ANIMLAB_OT_select_animation,
     ANIMLAB_OT_change_page,
     ANIMLAB_OT_import_rig,
     ANIMLAB_OT_apply_animation,
+    ANIMLAB_OT_preview_start,
+    ANIMLAB_OT_preview_stop,
 )
 
 

@@ -2,7 +2,7 @@
 
 A Blender add-on that brings the [Mesh2Motion](https://mesh2motion.org/) animation library into Blender: browse the animations, import a rig, and apply animations to an armature or push them into the NLA Editor.
 
-**Status:** MVP complete: AL1 (library), AL2 (thumbnails), AL3 (installable add-on), AL4 (browser) and AL5 (import + apply) done. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
+**Status:** MVP complete (AL1–AL5) plus AL6, the viewport preview. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
 
 ## Folder layout
 
@@ -38,6 +38,10 @@ Then in Blender: drag the zip into the Blender window, or *Edit → Preferences 
 - Thumbnails are shown a page at a time; use ◀ ▶ to page. Click an animation's name to select it.
 - **Selected Animation** shows a larger preview, category, pack, length, frames, frame rate, root motion and tags.
 
+## Previewing
+
+Select an animation and click **Preview**: it loops in the viewport, on the active armature when it matches the skeleton (so you see it on your own character), otherwise on a temporary rig at the 3D cursor. Click other animations to switch. **Stop Preview** puts everything back: the armature's action and pose, the scene's preview range and frame, and removes the temporary rig. The preview also stops by itself before saving, before opening another file, when you apply an animation, and when the add-on is disabled.
+
 ## Using an animation
 
 1. **Import Rig** adds the skeleton's Mesh2Motion rig at the 3D cursor (or select your own Mesh2Motion-rigged armature).
@@ -69,7 +73,7 @@ tests/run_addon_tests.sh    # packages the add-on, installs it into a throwaway 
                             # folder and tests the installed copy; your own Blender is not touched
 tests/take_ui_screenshot.sh shot.png [search] [apply]   # manual: opens Blender with a window for
                                                         # a few seconds and screenshots the tab;
-                                                        # "apply" also imports the rig and applies Walk
+                                                        # "apply" imports the rig and applies Walk; "preview" previews Walk
 ```
 
 The tests check that every clip of the web app is in the library, that each library holds only a clean rig, that every action is ready to use, that the catalog is valid, that the motion matches the web app (every joint within a quarter of a millimetre), and that every thumbnail shows the whole model.

@@ -6,6 +6,7 @@ really looks. Started by tests/take_ui_screenshot.sh, not by the automated tests
     blender --python ui_screenshot.py -- <output.png> [search text] [apply]
 
 With "apply" it also imports the Human rig, applies Walk to it and shows a frame mid-stride.
+With "preview" it previews Walk on a temporary rig and reports the frame playback reached.
 """
 import sys
 import traceback
@@ -15,7 +16,9 @@ import bpy
 OUT = sys.argv[sys.argv.index("--") + 1]
 ARGS = sys.argv[sys.argv.index("--") + 1:]
 SEARCH = ARGS[1] if len(ARGS) > 1 else ""
-APPLY = len(ARGS) > 2 and ARGS[2] == "apply"
+MODE = ARGS[2] if len(ARGS) > 2 else ""
+APPLY = MODE == "apply"
+PREVIEW = MODE == "preview"
 steps = {"n": 0}
 # never leave a window open: give up after this many steps
 MAX_STEPS = 12
@@ -54,6 +57,19 @@ def step():
         state.skeleton = "human"
         state.search = SEARCH
         state.selected = "human/walk"
+        if PREVIEW:
+            with bpy.context.temp_override(window=window, area=area):
+                for obj in list(bpy.data.objects):
+                    bpy.data.objects.remove(obj)
+                bpy.ops.animation_lab.preview_start()
+            window_region = next(region for region in area.regions if region.type == "WINDOW")
+            rig = bpy.data.objects[0]
+            rig.select_set(True)
+            with bpy.context.temp_override(window=window, area=area, region=window_region,
+                                           selected_objects=[rig], active_object=rig):
+                bpy.ops.view3d.view_selected()
+            print("PREVIEW started at frame", bpy.context.scene.frame_current,
+                  "playing:", window.screen.is_animation_playing)
         if APPLY:
             with bpy.context.temp_override(window=window, area=area):
                 for obj in list(bpy.data.objects):
@@ -78,6 +94,9 @@ def step():
         area.tag_redraw()
         return 1.5
     if steps["n"] == 4:
+        if PREVIEW:
+            print("PREVIEW frame at screenshot", bpy.context.scene.frame_current,
+                  "playing:", window.screen.is_animation_playing)
         with bpy.context.temp_override(window=window, area=area):
             bpy.ops.screen.screenshot(filepath=OUT)
         print("SCREENSHOT", OUT)

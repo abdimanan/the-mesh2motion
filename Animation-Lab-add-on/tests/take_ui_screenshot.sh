@@ -6,6 +6,7 @@
 #   tests/take_ui_screenshot.sh screenshot.png            # the browser as it opens
 #   tests/take_ui_screenshot.sh screenshot.png "walk"     # with a search
 #   tests/take_ui_screenshot.sh screenshot.png "walk" apply  # also import the rig and apply Walk
+#   tests/take_ui_screenshot.sh screenshot.png "walk" preview  # preview Walk on a temporary rig
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,5 +32,7 @@ trap 'rm -rf "$USER_FOLDER"' EXIT
 export BLENDER_USER_RESOURCES="$USER_FOLDER"
 
 "$BLENDER_BIN" --command extension install-file --repo user_default --enable "$ZIP" >/dev/null
+# no splash screen over the viewport in the throwaway user folder
+"$BLENDER_BIN" -b --python-expr "import bpy; bpy.context.preferences.view.show_splash = False; bpy.ops.wm.save_userpref()" >/dev/null 2>&1
 # watchdog: Blender is stopped after 120 s whatever happens (macOS has no `timeout`)
-perl -e 'alarm 120; exec @ARGV' "$BLENDER_BIN" --python "$HERE/ui_screenshot.py" -- "$OUT" "$SEARCH" "$MODE" 2>&1 | grep -E "SCREENSHOT|FAILED|Error|Traceback|line [0-9]" || true
+perl -e 'alarm 120; exec @ARGV' "$BLENDER_BIN" --python "$HERE/ui_screenshot.py" -- "$OUT" "$SEARCH" "$MODE" 2>&1 | grep -E "SCREENSHOT|PREVIEW|FAILED|Error|Traceback|line [0-9]" || true
