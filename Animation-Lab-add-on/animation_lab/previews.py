@@ -30,5 +30,8 @@ def icon_id(path):
     if _collection is None or not path or not os.path.isfile(path):
         return 0
     if path not in _collection:
-        _collection.load(path, path, "IMAGE")
+        preview = _collection.load(path, path, "IMAGE")
+        # Blender loads previews lazily and shows a spinner until something asks for their
+        # pixels; reading the size loads the image now, so the thumbnail appears at once
+        preview.image_size[:]
     return _collection[path].icon_id

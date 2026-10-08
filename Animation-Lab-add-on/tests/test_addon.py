@@ -43,11 +43,14 @@ class CheckingLayout:
         self.test.assertIn(property_name, data.bl_rna.properties.keys(), f"no property {property_name!r}")
         self.calls.append(("prop", property_name))
 
-    def operator(self, idname, icon="NONE", **_kwargs):
+    def operator(self, idname, icon="NONE", text=None, depress=False, **_kwargs):
         self._icon(icon)
         category, name = idname.split(".")
         self.test.assertTrue(hasattr(getattr(bpy.ops, category), name), f"no operator {idname!r}")
-        self.calls.append(("operator", idname))
+        self.calls.append(("operator", idname, text))
+        if depress:
+            self.calls.append(("pressed", text))
+        return OperatorButton(self.test, getattr(getattr(bpy.ops, category), name), self.calls)
 
     def template_icon(self, icon_value=0, scale=1.0):
         self.test.assertGreater(icon_value, 0, "template_icon needs a loaded icon")
@@ -56,11 +59,27 @@ class CheckingLayout:
     def box(self):
         return CheckingLayout(self.test, self.calls)
 
+    def grid_flow(self, **_kwargs):
+        return CheckingLayout(self.test, self.calls)
+
     def column(self, **_kwargs):
         return CheckingLayout(self.test, self.calls)
 
     def row(self, **_kwargs):
         return CheckingLayout(self.test, self.calls)
+
+
+class OperatorButton:
+    """What layout.operator() returns: checks every property the panel sets on the button."""
+
+    def __init__(self, test, operator, calls):
+        object.__setattr__(self, "_test", test)
+        object.__setattr__(self, "_names", set(operator.get_rna_type().properties.keys()))
+        object.__setattr__(self, "_calls", calls)
+
+    def __setattr__(self, name, value):
+        self._test.assertIn(name, self._names, f"operator has no property {name!r}")
+        self._calls.append(("set", name, value))
 
 
 class DrawingAs:
@@ -104,8 +123,9 @@ class TestInstalledAddon(unittest.TestCase):
             self.assertTrue(os.path.isfile(library.file_path(animation["thumbnail"])), animation["id"])
 
     def test_registered_types(self):
-        self.assertTrue(hasattr(bpy.types, "ANIMLAB_PT_library"))
-        self.assertEqual(bpy.types.ANIMLAB_PT_library.bl_category, "Animation Lab")
+        for panel in ("ANIMLAB_PT_library", "ANIMLAB_PT_selection", "ANIMLAB_PT_skeleton"):
+            self.assertTrue(hasattr(bpy.types, panel), panel)
+            self.assertEqual(getattr(bpy.types, panel).bl_category, "Animation Lab")
         self.assertTrue(hasattr(bpy.context.window_manager, "animation_lab"))
         self.assertEqual(bpy.ops.animation_lab.reload_library(), {"FINISHED"})
 
@@ -127,25 +147,109 @@ class TestInstalledAddon(unittest.TestCase):
 
     def test_preferences(self):
         preferences = bpy.context.preferences.addons[MODULE].preferences
-        self.assertEqual(preferences.thumbnail_scale, 6.0)
+        self.assertEqual(preferences.thumbnail_scale, 4.5)
         calls = draw(self, type(preferences).draw, owner=preferences)
         self.assertIn(("label", f"{EXPECTED_ANIMATIONS} animations for {EXPECTED_SKELETONS} skeletons"), calls)
 
+    def setUp(self):
+        state = bpy.context.window_manager.animation_lab
+        state.skeleton = "human"
+        state.category = "ALL"
+        state.search = ""
+        state.selected = ""
+        bpy.context.preferences.addons[MODULE].preferences.page_size = 12
+
+    def selects(self, calls):
+        return [call for call in calls if call[0] == "operator" and call[1] == "animation_lab.select_animation"]
+
     def test_panel_draws(self):
-        bpy.context.window_manager.animation_lab.skeleton = "human"
         calls = draw(self, bpy.types.ANIMLAB_PT_library.draw)
         self.assertIn(("label", "178 animations"), calls)
+        self.assertIn(("label", "1 / 15"), calls)  # 178 animations, 12 per page
+        self.assertEqual(len(self.selects(calls)), 12)
+        self.assertIn(("prop", "search"), calls)
 
         # Blender hands out icon ids only when it has a UI, so in background mode the panel
         # leaves the picture out. What can be checked: the rig thumbnail was loaded in full.
         previews = importlib.import_module(MODULE + ".previews")
-        thumbnail = self.library.file_path(self.library.skeleton("human")["thumbnail"])
+        thumbnail = self.library.file_path(self.library.animations("human")[0]["thumbnail"])
         previews.icon_id(thumbnail)
         self.assertEqual(tuple(previews._collection[thumbnail].image_size), (256, 256))
         if not bpy.app.background:
             self.assertIn("template_icon", [call[0] for call in calls], "the rig thumbnail is shown")
         self.assertIn(("prop", "skeleton"), calls)
         self.assertIn(("prop", "category"), calls)
+
+    def test_search(self):
+        library = self.library
+        names = lambda results: {entry["name"] for entry in results}
+        self.assertIn("Walk", names(library.search("human", None, "walk")))
+        self.assertIn("Crouch_Walk", names(library.search("human", None, "walk")))
+        self.assertEqual(names(library.search("human", None, "sword attack")) - {n for n in names(library.animations("human")) if "Sword" in n and "Attack" in n}, set())
+        self.assertTrue(library.search("human", None, "sword attack"))
+        self.assertEqual(len(library.search("human", None, "mocap")), 16)  # the pack name is a tag
+        self.assertTrue(all(entry["category"] == "Locomotion" for entry in library.search("human", "Locomotion", "walk")))
+        self.assertEqual(library.search("human", None, "no such animation"), [])
+        self.assertEqual(len(library.search("fox")), 14)
+
+    def test_browser_shows_the_search_results(self):
+        state = bpy.context.window_manager.animation_lab
+        state.search = "dance"
+        calls = draw(self, bpy.types.ANIMLAB_PT_library.draw)
+        shown = {call[2] for call in self.selects(calls)}
+        self.assertTrue(shown)
+        self.assertTrue(all("Dance" in name for name in shown), shown)
+
+        state.search = "no such animation"
+        calls = draw(self, bpy.types.ANIMLAB_PT_library.draw)
+        self.assertIn(("label", "No animations match"), calls)
+
+    def test_paging(self):
+        state = bpy.context.window_manager.animation_lab
+        self.assertEqual(bpy.ops.animation_lab.change_page(step=-1), {"FINISHED"})
+        self.assertEqual(state.page, 0, "no page before the first")
+
+        for _ in range(20):
+            bpy.ops.animation_lab.change_page(step=1)
+        self.assertEqual(state.page, 14, "no page after the last")
+        calls = draw(self, bpy.types.ANIMLAB_PT_library.draw)
+        self.assertIn(("label", "15 / 15"), calls)
+        self.assertEqual(len(self.selects(calls)), 178 - 14 * 12)
+
+        state.search = "walk"
+        self.assertEqual(state.page, 0, "a new search starts at the first page")
+
+        bpy.context.preferences.addons[MODULE].preferences.page_size = 4
+        state.search = ""
+        self.assertIn(("label", "1 / 45"), draw(self, bpy.types.ANIMLAB_PT_library.draw))
+
+    def test_selecting_an_animation(self):
+        state = bpy.context.window_manager.animation_lab
+        calls = draw(self, bpy.types.ANIMLAB_PT_selection.draw)
+        self.assertIn(("label", "Click an animation to select it"), calls)
+
+        self.assertEqual(bpy.ops.animation_lab.select_animation(animation_id="human/walk"), {"FINISHED"})
+        self.assertEqual(state.selected, "human/walk")
+        calls = draw(self, bpy.types.ANIMLAB_PT_selection.draw)
+        self.assertIn(("label", "Walk"), calls)
+        self.assertIn(("label", "Locomotion · base pack"), calls)
+        self.assertIn(("label", "1.67 s · 41 frames at 24 fps"), calls)
+
+        state.search = "walk"
+        browser = draw(self, bpy.types.ANIMLAB_PT_library.draw)
+        self.assertEqual([call for call in browser if call[0] == "pressed"], [("pressed", "Walk")],
+                         "the selected animation is drawn pressed, and only it")
+
+        self.assertEqual(bpy.ops.animation_lab.select_animation(animation_id="human/nope"), {"CANCELLED"})
+        self.assertEqual(state.selected, "human/walk")
+
+        state.skeleton = "fox"
+        self.assertEqual(state.selected, "", "changing skeleton clears the selection")
+
+    def test_skeleton_panel(self):
+        calls = draw(self, bpy.types.ANIMLAB_PT_skeleton.draw)
+        self.assertIn(("label", "178 animations"), calls)
+        self.assertIn(("label", "Human Rig, 66 bones"), calls)
 
     def test_panel_draws_without_a_library(self):
         library = self.library

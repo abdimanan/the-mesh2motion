@@ -5,6 +5,7 @@ cached; reload() drops the cache.
 """
 
 import json
+import math
 import os
 
 LIBRARY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library")
@@ -84,3 +85,38 @@ def categories(skeleton_key):
 def file_path(relative_path):
     """Absolute path of a file inside the library (a .blend or a thumbnail)."""
     return os.path.join(LIBRARY_DIR, relative_path) if relative_path else None
+
+
+def animation(animation_id):
+    """The catalog entry with this id, or None."""
+    return next((entry for entry in animations() if entry["id"] == animation_id), None)
+
+
+def search(skeleton_key, category=None, text=""):
+    """Animations of a skeleton (and category) matching every word of the search text.
+
+    A word matches when it appears in the animation's name, category or tags, so "sword
+    attack" finds Sword_Attack and "mocap" finds the motion capture pack.
+    """
+    words = text.lower().split()
+    results = []
+    for entry in animations(skeleton_key, category):
+        searchable = " ".join([
+            entry["name"].lower().replace("_", " "),
+            entry["category"].lower(),
+            " ".join(entry["tags"]),
+        ])
+        if all(word in searchable for word in words):
+            results.append(entry)
+    return results
+
+
+def page_count(item_count, page_size):
+    return max(1, math.ceil(item_count / page_size))
+
+
+def page_of(items, page, page_size):
+    """The items on a page (0 based). Pages past the end show the last page."""
+    page = min(max(page, 0), page_count(len(items), page_size) - 1)
+    return items[page * page_size:(page + 1) * page_size]
+

@@ -2,7 +2,7 @@
 
 A Blender add-on that brings the [Mesh2Motion](https://mesh2motion.org/) animation library into Blender: browse the animations, import a rig, and apply animations to an armature or push them into the NLA Editor.
 
-**Status:** AL1 (library), AL2 (thumbnails) and AL3 (installable add-on with its sidebar tab) done. Browsing and applying animations come in AL4–AL5. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
+**Status:** AL1 (library), AL2 (thumbnails), AL3 (installable add-on) and AL4 (animation browser) done. Importing rigs and applying animations come in AL5. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
 
 ## Folder layout
 
@@ -32,6 +32,13 @@ tools/package_addon.sh        # builds the library and dist/animation_lab-0.1.0.
 
 Then in Blender: drag the zip into the Blender window, or *Edit → Preferences → Get Extensions → ⌄ (top right) → Install from Disk…*. Open the 3D Viewport sidebar (**N**) and pick the **Animation Lab** tab.
 
+## Using the browser
+
+- Pick a **skeleton** (Human, Fox, Horse…), type in **Search** (matches names, categories and tags; every word must match, e.g. `sword attack`), and pick a **category**.
+- Thumbnails are shown a page at a time; use ◀ ▶ to page. Click an animation's name to select it.
+- **Selected Animation** shows a larger preview, category, pack, length, frames, frame rate, root motion and tags.
+- *Edit → Preferences → Add-ons → Animation Lab*: thumbnail size and animations per page.
+
 ## Build the library
 
 Needs Blender 4.2 or newer (tested with 4.5 LTS) and the `mesh2motion-app` folder next to this one.
@@ -50,6 +57,8 @@ Blender is found from `$BLENDER`, then `blender` on the PATH, then `/Application
 tests/run_tests.sh          # the library (inside Blender)
 tests/run_addon_tests.sh    # packages the add-on, installs it into a throwaway Blender user
                             # folder and tests the installed copy; your own Blender is not touched
+tests/take_ui_screenshot.sh shot.png [search]   # manual: opens Blender with a window for a few
+                                                # seconds and screenshots the Animation Lab tab
 ```
 
 The tests check that every clip of the web app is in the library, that each library holds only a clean rig, that every action is ready to use, that the catalog is valid, that the motion matches the web app (every joint within a quarter of a millimetre), and that every thumbnail shows the whole model.

@@ -1,18 +1,32 @@
-"""The Animation Lab tab in the 3D Viewport sidebar (N panel)."""
+"""The Animation Lab tab in the 3D Viewport sidebar (N panel): the animation browser, the
+selected animation and the skeleton."""
 
 import bpy
 from bpy.types import Panel
 
-from . import library, preferences, previews
-from .operators import ANIMLAB_OT_reload_library
+from . import library, preferences, previews, properties
+from .operators import ANIMLAB_OT_change_page, ANIMLAB_OT_reload_library, ANIMLAB_OT_select_animation
 
 SIDEBAR_TAB = "Animation Lab"
 
 
-class ANIMLAB_PT_library(Panel):
+class AnimationLabPanel:
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = SIDEBAR_TAB
+
+
+def draw_thumbnail(layout, relative_path, scale):
+    """The library thumbnail, or a plain placeholder when no icon can be shown (Blender only
+    hands out icons when it has a UI)."""
+    icon = previews.icon_id(library.file_path(relative_path))
+    if icon:
+        layout.template_icon(icon_value=icon, scale=scale)
+    else:
+        layout.label(text="", icon="ACTION")
+
+
+class ANIMLAB_PT_library(AnimationLabPanel, Panel):
     bl_label = "Animation Lab"
 
     def draw(self, context):
@@ -26,30 +40,94 @@ class ANIMLAB_PT_library(Panel):
             return
 
         state = context.window_manager.animation_lab
-        layout.prop(state, "skeleton", text="")
+        settings = preferences.get(context)
 
-        skeleton = library.skeleton(state.skeleton)
+        layout.prop(state, "skeleton", text="")
+        # Blender draws its own clear button inside the search field
+        layout.prop(state, "search", text="", icon="VIEWZOOM")
+        layout.prop(state, "category", text="")
+
+        results = properties.filtered_animations(state)
+        if not results:
+            layout.label(text="No animations match", icon="INFO")
+            return
+
+        pages = library.page_count(len(results), settings.page_size)
+        page = min(state.page, pages - 1)
+        row = layout.row(align=True)
+        row.label(text=f"{len(results)} animations")
+        previous_page = row.operator(ANIMLAB_OT_change_page.bl_idname, text="", icon="TRIA_LEFT")
+        previous_page.step = -1
+        row.label(text=f"{page + 1} / {pages}")
+        next_page = row.operator(ANIMLAB_OT_change_page.bl_idname, text="", icon="TRIA_RIGHT")
+        next_page.step = 1
+
+        grid = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=True, align=False)
+        for entry in library.page_of(results, page, settings.page_size):
+            cell = grid.column(align=True)
+            draw_thumbnail(cell, entry["thumbnail"], settings.thumbnail_scale)
+            button = cell.operator(
+                ANIMLAB_OT_select_animation.bl_idname,
+                text=entry["name"],
+                depress=entry["id"] == state.selected,
+            )
+            button.animation_id = entry["id"]
+
+
+class ANIMLAB_PT_selection(AnimationLabPanel, Panel):
+    bl_label = "Selected Animation"
+    bl_parent_id = "ANIMLAB_PT_library"
+
+    @classmethod
+    def poll(cls, context):
+        return library.is_available()
+
+    def draw(self, context):
+        layout = self.layout
+        entry = library.animation(context.window_manager.animation_lab.selected)
+        if entry is None:
+            layout.label(text="Click an animation to select it", icon="INFO")
+            return
+
+        draw_thumbnail(layout, entry["thumbnail"], preferences.get(context).thumbnail_scale * 1.5)
+        column = layout.column(align=True)
+        column.label(text=entry["name"], icon="ACTION")
+        column.label(text=f"{entry['category']} · {entry['pack']} pack")
+        frames = entry["frame_end"] - entry["frame_start"] + 1
+        column.label(text=f"{entry['duration']:.2f} s · {frames} frames at {entry['fps']} fps")
+        if entry["root_motion"]:
+            column.label(text="Moves through the scene (root motion)", icon="CON_LOCLIKE")
+        if entry["tags"]:
+            column.label(text="Tags: " + ", ".join(entry["tags"]))
+
+        box = layout.box()
+        box.label(text="Applying it to an armature", icon="INFO")
+        box.label(text="arrives in the next update.")
+
+
+class ANIMLAB_PT_skeleton(AnimationLabPanel, Panel):
+    bl_label = "Skeleton"
+    bl_parent_id = "ANIMLAB_PT_library"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(cls, context):
+        return library.is_available()
+
+    def draw(self, context):
+        layout = self.layout
+        skeleton = library.skeleton(context.window_manager.animation_lab.skeleton)
         if skeleton is None:
             return
 
-        icon = previews.icon_id(library.file_path(skeleton.get("thumbnail")))
-        if icon:
-            layout.template_icon(icon_value=icon, scale=preferences.get(context).thumbnail_scale)
-
+        draw_thumbnail(layout, skeleton.get("thumbnail"), preferences.get(context).thumbnail_scale * 1.5)
         column = layout.column(align=True)
         column.label(text=f"{skeleton['animations']} animations", icon="ACTION")
         column.label(text=f"{skeleton['rig']}, {skeleton['bones']} bones", icon="ARMATURE_DATA")
-
-        layout.prop(state, "category", text="")
-
-        box = layout.box()
-        box.label(text="Browsing and applying animations", icon="INFO")
-        box.label(text="arrive in the next update.")
-
         layout.operator(ANIMLAB_OT_reload_library.bl_idname, icon="FILE_REFRESH")
 
 
-CLASSES = (ANIMLAB_PT_library,)
+CLASSES = (ANIMLAB_PT_library, ANIMLAB_PT_selection, ANIMLAB_PT_skeleton)
 
 
 def register():

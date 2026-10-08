@@ -1,7 +1,7 @@
 """Add-on preferences (Edit > Preferences > Add-ons > Animation Lab)."""
 
 import bpy
-from bpy.props import FloatProperty
+from bpy.props import FloatProperty, IntProperty
 from bpy.types import AddonPreferences
 
 from . import library
@@ -16,15 +16,23 @@ class ANIMLAB_AP_preferences(AddonPreferences):
 
     thumbnail_scale: FloatProperty(
         name="Thumbnail Size",
-        description="How large previews are drawn in the Animation Lab panel",
-        default=6.0,
+        description="How large animation previews are drawn in the Animation Lab panel",
+        default=4.5,
         min=2.0,
         max=12.0,
+    )
+    page_size: IntProperty(
+        name="Animations per Page",
+        description="How many animations the browser shows at once",
+        default=12,
+        min=4,
+        max=48,
     )
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "thumbnail_scale")
+        layout.prop(self, "page_size")
 
         box = layout.box()
         box.label(text="Library", icon="ASSET_MANAGER")

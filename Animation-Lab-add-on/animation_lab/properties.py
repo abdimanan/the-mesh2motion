@@ -2,7 +2,7 @@
 not saved into the user's .blend files."""
 
 import bpy
-from bpy.props import EnumProperty, PointerProperty
+from bpy.props import EnumProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import PropertyGroup
 
 from . import library
@@ -34,8 +34,21 @@ def category_items(self, _context):
 
 
 def on_skeleton_changed(self, _context):
-    # the categories differ per skeleton
+    # the categories and animations differ per skeleton
     self.category = ALL_CATEGORIES
+    self.selected = ""
+    self.page = 0
+
+
+def on_filter_changed(self, _context):
+    # a different result list starts at its first page
+    self.page = 0
+
+
+def filtered_animations(state):
+    """The animations the browser shows for the current skeleton, category and search."""
+    category = None if state.category == ALL_CATEGORIES else state.category
+    return library.search(state.skeleton, category, state.search)
 
 
 class ANIMLAB_PG_state(PropertyGroup):
@@ -49,7 +62,16 @@ class ANIMLAB_PG_state(PropertyGroup):
         name="Category",
         description="Only show animations of this kind",
         items=category_items,
+        update=on_filter_changed,
     )
+    search: StringProperty(
+        name="Search",
+        description="Show animations whose name, category or tags contain every word typed here",
+        options={"TEXTEDIT_UPDATE"},  # filter while typing
+        update=on_filter_changed,
+    )
+    page: IntProperty(name="Page", min=0, default=0)
+    selected: StringProperty(name="Selected Animation", description="Catalog id of the selected animation")
 
 
 def register():
