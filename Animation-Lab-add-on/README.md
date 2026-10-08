@@ -2,7 +2,7 @@
 
 A Blender add-on that brings the [Mesh2Motion](https://mesh2motion.org/) animation library into Blender: browse the animations, import a rig, and apply animations to an armature or push them into the NLA Editor.
 
-**Status:** MVP complete (AL1–AL5) plus AL6, the viewport preview. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
+**Status:** MVP complete (AL1–AL5), plus AL6 (viewport preview) and AL7 (Mixamo mode). Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
 
 ## Folder layout
 
@@ -49,7 +49,11 @@ Select an animation and click **Preview**: it loops in the viewport, on the acti
 3. **Apply** sets it as the armature's action. **Push to NLA** adds it as a strip at the current frame (on the "Animation Lab" track, or a new track when that spot is taken).
 4. Tick **Mirror** first to get it with left and right swapped.
 
-Animations are copied into your file (not linked), so it keeps working without the add-on. Applying the same animation again reuses the copy. Clips are retimed to play at their real speed at your scene's frame rate. Armatures with other bone names (e.g. Mixamo) are refused with a message.
+Animations are copied into your file (not linked), so it keeps working without the add-on. Applying the same animation again reuses the copy. Clips are retimed to play at their real speed at your scene's frame rate. Armatures with other bone names are refused with a message.
+
+## Mixamo characters (Mixamo mode)
+
+Select a **Mixamo armature** (e.g. Y Bot or any character downloaded from Mixamo) and apply or preview a **Human** animation: the panel shows "Mixamo rig: 65/65 bones, converted" and the animation is converted onto that armature. Every Mixamo bone turns exactly like its Mesh2Motion bone (Mixamo's bones have different axes, so the keys can't just be renamed), and the hips carry the movement scaled to the character's height. The result is a normal action on your armature, so it can be mixed with Mixamo clips in the NLA Editor. Names like `mixamorig:Hips`, `mixamorig1:Hips`, `mixamorig_Hips` or plain `Hips` are recognised. No Mixamo data ships with the add-on: the conversion uses your armature.
 
 *Edit → Preferences → Add-ons → Animation Lab*: thumbnail size, animations per page, and **Match Scene Frame Rate** (on by default; off keeps a clip's own frames).
 
@@ -73,7 +77,8 @@ tests/run_addon_tests.sh    # packages the add-on, installs it into a throwaway 
                             # folder and tests the installed copy; your own Blender is not touched
 tests/take_ui_screenshot.sh shot.png [search] [apply]   # manual: opens Blender with a window for
                                                         # a few seconds and screenshots the tab;
-                                                        # "apply" imports the rig and applies Walk; "preview" previews Walk
+                                                        # "apply" imports the rig and applies Walk; "preview" previews Walk;
+                                                        # "mixamo" applies Walk to the local Y Bot
 ```
 
 The tests check that every clip of the web app is in the library, that each library holds only a clean rig, that every action is ready to use, that the catalog is valid, that the motion matches the web app (every joint within a quarter of a millimetre), and that every thumbnail shows the whole model.

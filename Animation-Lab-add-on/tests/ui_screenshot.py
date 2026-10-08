@@ -7,6 +7,7 @@ really looks. Started by tests/take_ui_screenshot.sh, not by the automated tests
 
 With "apply" it also imports the Human rig, applies Walk to it and shows a frame mid-stride.
 With "preview" it previews Walk on a temporary rig and reports the frame playback reached.
+With "mixamo" it imports the local Y Bot Mixamo character and applies Walk to it (Mixamo mode).
 """
 import sys
 import traceback
@@ -19,6 +20,8 @@ SEARCH = ARGS[1] if len(ARGS) > 1 else ""
 MODE = ARGS[2] if len(ARGS) > 2 else ""
 APPLY = MODE == "apply"
 PREVIEW = MODE == "preview"
+MIXAMO = MODE == "mixamo"
+Y_BOT = __file__.rsplit("/", 3)[0] + "/mesh2motion-app/docs/download animation as mixamo bone rig/Y Bot.fbx"
 steps = {"n": 0}
 # never leave a window open: give up after this many steps
 MAX_STEPS = 12
@@ -57,6 +60,21 @@ def step():
         state.skeleton = "human"
         state.search = SEARCH
         state.selected = "human/walk"
+        if MIXAMO:
+            with bpy.context.temp_override(window=window, area=area):
+                for obj in list(bpy.data.objects):
+                    bpy.data.objects.remove(obj)
+                bpy.ops.import_scene.fbx(filepath=Y_BOT)
+                y_bot = next(obj for obj in bpy.data.objects if obj.type == "ARMATURE")
+                y_bot.animation_data.action = None
+                bpy.context.view_layer.objects.active = y_bot
+                bpy.ops.animation_lab.apply_animation(mode="ACTION")
+                bpy.context.scene.frame_set(25)
+                print("MIXAMO applied", y_bot.animation_data.action.name)
+            window_region = next(region for region in area.regions if region.type == "WINDOW")
+            with bpy.context.temp_override(window=window, area=area, region=window_region,
+                                           selected_objects=[obj for obj in bpy.data.objects], active_object=y_bot):
+                bpy.ops.view3d.view_selected()
         if PREVIEW:
             with bpy.context.temp_override(window=window, area=area):
                 for obj in list(bpy.data.objects):

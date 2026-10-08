@@ -4,7 +4,7 @@ import bpy
 from bpy.props import EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 
-from . import apply, library, preferences, preview, previews, properties
+from . import apply, library, mixamo, preferences, preview, previews, properties
 
 
 class ANIMLAB_OT_reload_library(Operator):
@@ -133,15 +133,16 @@ class ANIMLAB_OT_apply_animation(Operator):
         preview.stop(context)
         armature = context.active_object
 
-        match = apply.compatibility(armature, library.skeleton(entry["skeleton"]))
-        if not match.ok:
+        if not mixamo.can_play_on(entry, armature):
+            match = apply.compatibility(armature, library.skeleton(entry["skeleton"]))
             self.report({"ERROR"}, f"{armature.name}: {match.describe()}. Import the "
                                    f"{library.skeleton(entry['skeleton'])['display_name']} rig to use this animation.")
             return {"CANCELLED"}
 
         scene = context.scene
         scene_fps = round(scene.render.fps / scene.render.fps_base)
-        action = apply.get_action(entry, scene_fps, preferences.get(context).match_scene_fps, state.mirror)
+        action = mixamo.action_for(context, entry, armature, scene_fps,
+                                   preferences.get(context).match_scene_fps, state.mirror)
 
         if self.mode == "NLA":
             apply.push_to_nla(armature, action, scene.frame_current)

@@ -13,7 +13,7 @@ import bpy
 from bpy.app.handlers import persistent
 from mathutils import Matrix
 
-from . import apply, library
+from . import apply, library, mixamo
 
 PREVIEW_PROPERTY = "animation_lab_preview"
 
@@ -63,7 +63,7 @@ def start(context, entry, mirrored=False, match_scene_fps=True):
     session = _Session()
 
     armature = context.active_object
-    if armature is None or not apply.compatibility(armature, skeleton).ok:
+    if not mixamo.can_play_on(entry, armature):
         armature = _temporary_rig(context, skeleton)
         session.temporary_rig = True
     else:
@@ -158,7 +158,7 @@ def _temporary_rig(context, skeleton):
 def _play(context, entry, mirrored, match_scene_fps):
     scene = context.scene
     scene_fps = round(scene.render.fps / scene.render.fps_base)
-    action = apply.get_action(entry, scene_fps, match_scene_fps, mirrored)
+    action = mixamo.action_for(context, entry, target(), scene_fps, match_scene_fps, mirrored)
     apply.assign(target(), action)
     _session.animation_id = entry["id"]
 

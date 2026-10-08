@@ -7,6 +7,7 @@ as a broken sidebar in a real window.
 """
 
 import importlib
+import math
 import os
 import sys
 import tempfile
@@ -18,6 +19,9 @@ import bpy
 from mathutils import Quaternion, Vector
 
 MODULE = "bl_ext.user_default.animation_lab"
+# a real Mixamo character, only on the developer's machine (Mixamo files are not in the repo)
+Y_BOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "mesh2motion-app", "docs",
+                     "download animation as mixamo bone rig", "Y Bot.fbx")
 EXPECTED_ANIMATIONS = 251
 EXPECTED_SKELETONS = 9
 
@@ -538,6 +542,160 @@ class TestInstalledAddon(unittest.TestCase):
         self.assertIn(("label", "Previewing on Human Rig"), calls)
         self.assertIn(("operator", "animation_lab.preview_stop", None), calls)
         bpy.ops.animation_lab.preview_stop()
+
+    # --- AL7: Mixamo mode -------------------------------------------------------------------
+
+    def mixamo(self):
+        return importlib.import_module(MODULE + ".mixamo")
+
+    def make_mixamo_rig(self, roll=False, prefix="mixamorig:"):
+        """A Mixamo-style armature built from the library rig: Mixamo names, and with roll=True
+        bones rolled so their axes differ the way Mixamo's differ from Mesh2Motion's."""
+        rig = self.import_rig()
+        rig.name = "Mixamo Test Rig"
+        for m2m, mixamo_name in self.mixamo().MIXAMO_FROM_M2M.items():
+            rig.data.bones[m2m].name = prefix + mixamo_name
+        if roll:
+            bpy.ops.object.mode_set(mode="EDIT")
+            for bone in rig.data.edit_bones:
+                if "Arm" in bone.name or "Hand" in bone.name or "Shoulder" in bone.name:
+                    bone.roll += math.pi / 2
+                elif "Leg" in bone.name or "Foot" in bone.name or "Toe" in bone.name:
+                    bone.roll += math.pi
+                elif "Spine" in bone.name or "Neck" in bone.name:
+                    bone.roll += 0.5
+            bpy.ops.object.mode_set(mode="OBJECT")
+        return rig
+
+    def assert_same_motion(self, target, source, frames, tolerance=1e-5):
+        names = {m2m: mixamo_name for m2m, mixamo_name in self.mixamo().MIXAMO_FROM_M2M.items()}
+        target_names = self.mixamo().mixamo_bones(target)
+        for frame in frames:
+            bpy.context.scene.frame_set(frame)
+            for m2m, mixamo_name in names.items():
+                expected = source.matrix_world @ source.pose.bones[m2m].head
+                actual = target.matrix_world @ target.pose.bones[target_names[mixamo_name]].head
+                self.assertLess((actual - expected).length, tolerance, f"frame {frame}: {mixamo_name}")
+
+    def converted_on(self, target, animation_id="human/walk"):
+        bpy.context.view_layer.objects.active = target
+        bpy.ops.animation_lab.select_animation(animation_id=animation_id)
+        self.assertEqual(self.apply_selected(), {"FINISHED"})
+        return target.animation_data.action
+
+    def test_mixamo_armatures_are_recognised(self):
+        self.clean_scene()
+        for prefix in ("mixamorig:", "mixamorig1:", "mixamorig_", "mixamorig", ""):
+            rig = self.make_mixamo_rig(prefix=prefix)
+            self.assertTrue(self.mixamo().is_mixamo(rig), repr(prefix))
+            self.assertEqual(self.mixamo().matching_bones(rig), (65, 65), repr(prefix))
+            bpy.data.objects.remove(rig)
+        self.assertFalse(self.mixamo().is_mixamo(self.import_rig()), "a Mesh2Motion rig is not Mixamo")
+
+    def test_converted_motion_on_a_mixamo_named_rig(self):
+        self.clean_scene()
+        source = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        self.apply_selected()
+        target = self.make_mixamo_rig()
+        action = self.converted_on(target)
+        self.assertEqual(action.name, "Walk (Mixamo)")
+        self.assert_same_motion(target, source, range(0, 41, 4))
+
+    def test_conversion_compensates_for_different_bone_axes(self):
+        # the same joints but rolled bones: only a real per-bone conversion keeps the motion
+        self.clean_scene()
+        source = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/sword_attack")
+        self.apply_selected()
+        target = self.make_mixamo_rig(roll=True)
+        self.converted_on(target, "human/sword_attack")
+        self.assert_same_motion(target, source, range(0, 47, 5))
+
+    def test_root_motion_on_a_mixamo_rig(self):
+        self.clean_scene()
+        source = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/dodge_left_rm")
+        self.apply_selected()
+        target = self.make_mixamo_rig(roll=True)
+        self.converted_on(target, "human/dodge_left_rm")
+        start, end = (round(value) for value in target.animation_data.action.frame_range)
+        self.assert_same_motion(target, source, range(start, end + 1, 4))
+
+    def test_mixamo_action_is_reused_and_mirrorable(self):
+        self.clean_scene()
+        target = self.make_mixamo_rig()
+        first = self.converted_on(target)
+        self.assertIs(self.converted_on(target), first, "converted once per armature")
+
+        bpy.context.window_manager.animation_lab.mirror = True
+        mirrored = self.converted_on(target)
+        self.assertEqual(mirrored.name, "Walk (Mixamo, mirrored)")
+
+        bpy.context.window_manager.animation_lab.mirror = False
+        bpy.context.scene.frame_current = 30
+        self.assertEqual(self.apply_selected("NLA"), {"FINISHED"})
+        self.assertEqual(target.animation_data.nla_tracks[0].strips[0].action, first)
+
+    def test_mixamo_mode_is_for_human_animations_only(self):
+        self.clean_scene()
+        target = self.make_mixamo_rig()
+        bpy.context.view_layer.objects.active = target
+        bpy.context.window_manager.animation_lab.skeleton = "fox"
+        bpy.ops.animation_lab.select_animation(animation_id="fox/run")
+        with self.assertRaises(RuntimeError):
+            self.apply_selected()
+
+    def test_preview_on_a_mixamo_rig(self):
+        self.clean_scene()
+        target = self.make_mixamo_rig()
+        bpy.context.view_layer.objects.active = target
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        bpy.ops.animation_lab.preview_start()
+        self.assertEqual(self.preview().target(), target, "plays on the Mixamo rig itself")
+        self.assertEqual(target.animation_data.action.name, "Walk (Mixamo)")
+        bpy.ops.animation_lab.preview_stop()
+        self.assertIsNone(target.animation_data)
+
+    def test_panel_with_a_mixamo_rig(self):
+        self.clean_scene()
+        target = self.make_mixamo_rig()
+        bpy.context.view_layer.objects.active = target
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        calls = draw(self, bpy.types.ANIMLAB_PT_selection.draw)
+        self.assertIn(("label", "Mixamo Test Rig: Mixamo rig: 65/65 bones, converted"), calls)
+
+    @unittest.skipUnless(os.path.isfile(Y_BOT), "the Y Bot Mixamo character is only on the developer's machine")
+    def test_mixamo_y_bot(self):
+        self.clean_scene()
+        bpy.context.scene.render.fps = 30
+        objects_before = set(bpy.data.objects)
+        bpy.ops.import_scene.fbx(filepath=Y_BOT)
+        y_bot = next(obj for obj in bpy.data.objects if obj not in objects_before and obj.type == "ARMATURE")
+        y_bot.animation_data.action = None
+        for bone in y_bot.pose.bones:
+            bone.matrix_basis.identity()
+
+        source = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        self.apply_selected()
+        self.converted_on(y_bot)
+
+        def world_rotation(obj, matrix):
+            return (obj.matrix_world @ matrix).to_3x3().normalized().to_quaternion()
+
+        rest_target = {bone.name: world_rotation(y_bot, bone.matrix_local) for bone in y_bot.data.bones}
+        rest_source = {bone.name: world_rotation(source, bone.matrix_local) for bone in source.data.bones}
+        worst = 0.0
+        for frame in range(0, 51, 5):
+            bpy.context.scene.frame_set(frame)
+            for m2m, mixamo_name in self.mixamo().MIXAMO_FROM_M2M.items():
+                bone = y_bot.pose.bones["mixamorig:" + mixamo_name]
+                change_target = world_rotation(y_bot, bone.matrix) @ rest_target[bone.name].inverted()
+                change_source = world_rotation(source, source.pose.bones[m2m].matrix) @ rest_source[m2m].inverted()
+                angle = math.degrees(change_target.rotation_difference(change_source).angle) % 360
+                worst = max(worst, min(angle, 360 - angle))  # q and -q are the same rotation
+        self.assertLess(worst, 0.01, "every Y Bot bone turns exactly like its Mesh2Motion bone")
 
     def test_panel_draws_without_a_library(self):
         library = self.library

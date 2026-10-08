@@ -4,7 +4,7 @@ selected animation and the skeleton."""
 import bpy
 from bpy.types import Panel
 
-from . import apply, library, preferences, preview, previews, properties
+from . import apply, library, mixamo, preferences, preview, previews, properties
 from .operators import (
     ANIMLAB_OT_apply_animation,
     ANIMLAB_OT_change_page,
@@ -128,6 +128,8 @@ def draw_apply_controls(layout, context, entry, state):
     armature = context.active_object if context.active_object and context.active_object.type == "ARMATURE" else None
     if armature is None:
         box.label(text="Select an armature, or import the rig", icon="INFO")
+    elif mixamo.uses_mixamo_mode(entry, armature):
+        box.label(text=f"{armature.name}: {mixamo.describe(armature)}", icon="CHECKMARK")
     else:
         match = apply.compatibility(armature, library.skeleton(entry["skeleton"]))
         box.label(text=f"{armature.name}: {match.describe()}", icon="CHECKMARK" if match.ok else "ERROR")
