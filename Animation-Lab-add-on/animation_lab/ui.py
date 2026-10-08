@@ -4,8 +4,14 @@ selected animation and the skeleton."""
 import bpy
 from bpy.types import Panel
 
-from . import library, preferences, previews, properties
-from .operators import ANIMLAB_OT_change_page, ANIMLAB_OT_reload_library, ANIMLAB_OT_select_animation
+from . import apply, library, preferences, previews, properties
+from .operators import (
+    ANIMLAB_OT_apply_animation,
+    ANIMLAB_OT_change_page,
+    ANIMLAB_OT_import_rig,
+    ANIMLAB_OT_reload_library,
+    ANIMLAB_OT_select_animation,
+)
 
 SIDEBAR_TAB = "Animation Lab"
 
@@ -84,9 +90,11 @@ class ANIMLAB_PT_selection(AnimationLabPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
-        entry = library.animation(context.window_manager.animation_lab.selected)
+        state = context.window_manager.animation_lab
+        entry = library.animation(state.selected)
         if entry is None:
             layout.label(text="Click an animation to select it", icon="INFO")
+            layout.operator(ANIMLAB_OT_import_rig.bl_idname, icon="ARMATURE_DATA")
             return
 
         draw_thumbnail(layout, entry["thumbnail"], preferences.get(context).thumbnail_scale * 1.5)
@@ -100,9 +108,23 @@ class ANIMLAB_PT_selection(AnimationLabPanel, Panel):
         if entry["tags"]:
             column.label(text="Tags: " + ", ".join(entry["tags"]))
 
-        box = layout.box()
-        box.label(text="Applying it to an armature", icon="INFO")
-        box.label(text="arrives in the next update.")
+        draw_apply_controls(layout, context, entry, state)
+
+
+def draw_apply_controls(layout, context, entry, state):
+    box = layout.box()
+    armature = context.active_object if context.active_object and context.active_object.type == "ARMATURE" else None
+    if armature is None:
+        box.label(text="Select an armature, or import the rig", icon="INFO")
+    else:
+        match = apply.compatibility(armature, library.skeleton(entry["skeleton"]))
+        box.label(text=f"{armature.name}: {match.describe()}", icon="CHECKMARK" if match.ok else "ERROR")
+
+    box.operator(ANIMLAB_OT_import_rig.bl_idname, icon="ARMATURE_DATA")
+    box.prop(state, "mirror", icon="MOD_MIRROR")
+    row = box.row(align=True)
+    row.operator(ANIMLAB_OT_apply_animation.bl_idname, text="Apply", icon="ACTION").mode = "ACTION"
+    row.operator(ANIMLAB_OT_apply_animation.bl_idname, text="Push to NLA", icon="NLA").mode = "NLA"
 
 
 class ANIMLAB_PT_skeleton(AnimationLabPanel, Panel):
@@ -124,6 +146,7 @@ class ANIMLAB_PT_skeleton(AnimationLabPanel, Panel):
         column = layout.column(align=True)
         column.label(text=f"{skeleton['animations']} animations", icon="ACTION")
         column.label(text=f"{skeleton['rig']}, {skeleton['bones']} bones", icon="ARMATURE_DATA")
+        layout.operator(ANIMLAB_OT_import_rig.bl_idname, icon="ARMATURE_DATA")
         layout.operator(ANIMLAB_OT_reload_library.bl_idname, icon="FILE_REFRESH")
 
 

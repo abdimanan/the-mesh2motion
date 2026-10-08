@@ -3,14 +3,22 @@
 Thumbnails only exist when Blender has a window, so this is the one check of how the panel
 really looks. Started by tests/take_ui_screenshot.sh, not by the automated tests.
 
-    blender --python ui_screenshot.py -- <output.png> [search text]
+    blender --python ui_screenshot.py -- <output.png> [search text] [apply]
+
+With "apply" it also imports the Human rig, applies Walk to it and shows a frame mid-stride.
 """
-import bpy
 import sys
+import traceback
+
+import bpy
 
 OUT = sys.argv[sys.argv.index("--") + 1]
-SEARCH = sys.argv[sys.argv.index("--") + 2] if len(sys.argv) > sys.argv.index("--") + 2 else ""
+ARGS = sys.argv[sys.argv.index("--") + 1:]
+SEARCH = ARGS[1] if len(ARGS) > 1 else ""
+APPLY = len(ARGS) > 2 and ARGS[2] == "apply"
 steps = {"n": 0}
+# never leave a window open: give up after this many steps
+MAX_STEPS = 12
 
 
 def view3d():
@@ -22,6 +30,20 @@ def view3d():
 
 
 def tick():
+    """Runs one step; any error is printed and Blender quits, so no window is left open."""
+    try:
+        next_interval = step()
+    except Exception:  # noqa: BLE001
+        print("UI SCREENSHOT FAILED")
+        traceback.print_exc()
+        next_interval = None
+    if next_interval is None or steps["n"] >= MAX_STEPS:
+        bpy.ops.wm.quit_blender()
+        return None
+    return next_interval
+
+
+def step():
     steps["n"] += 1
     window, area = view3d()
     if area is None:
@@ -32,6 +54,16 @@ def tick():
         state.skeleton = "human"
         state.search = SEARCH
         state.selected = "human/walk"
+        if APPLY:
+            with bpy.context.temp_override(window=window, area=area):
+                for obj in list(bpy.data.objects):
+                    bpy.data.objects.remove(obj)
+                bpy.ops.animation_lab.import_rig()
+                bpy.ops.animation_lab.apply_animation(mode="ACTION")
+                bpy.context.scene.frame_set(20)
+            window_region = next(region for region in area.regions if region.type == "WINDOW")
+            with bpy.context.temp_override(window=window, area=area, region=window_region):
+                bpy.ops.view3d.view_selected()
         return 0.5
     if steps["n"] == 2:
         for region in area.regions:
@@ -49,8 +81,6 @@ def tick():
         with bpy.context.temp_override(window=window, area=area):
             bpy.ops.screen.screenshot(filepath=OUT)
         print("SCREENSHOT", OUT)
-        return 0.5
-    bpy.ops.wm.quit_blender()
     return None
 
 

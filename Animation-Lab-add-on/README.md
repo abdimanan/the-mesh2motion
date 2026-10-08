@@ -2,7 +2,7 @@
 
 A Blender add-on that brings the [Mesh2Motion](https://mesh2motion.org/) animation library into Blender: browse the animations, import a rig, and apply animations to an armature or push them into the NLA Editor.
 
-**Status:** AL1 (library), AL2 (thumbnails), AL3 (installable add-on) and AL4 (animation browser) done. Importing rigs and applying animations come in AL5. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
+**Status:** MVP complete: AL1 (library), AL2 (thumbnails), AL3 (installable add-on), AL4 (browser) and AL5 (import + apply) done. Plan and reports are in [`../docs/animation-lab/`](../docs/animation-lab/).
 
 ## Folder layout
 
@@ -37,7 +37,17 @@ Then in Blender: drag the zip into the Blender window, or *Edit → Preferences 
 - Pick a **skeleton** (Human, Fox, Horse…), type in **Search** (matches names, categories and tags; every word must match, e.g. `sword attack`), and pick a **category**.
 - Thumbnails are shown a page at a time; use ◀ ▶ to page. Click an animation's name to select it.
 - **Selected Animation** shows a larger preview, category, pack, length, frames, frame rate, root motion and tags.
-- *Edit → Preferences → Add-ons → Animation Lab*: thumbnail size and animations per page.
+
+## Using an animation
+
+1. **Import Rig** adds the skeleton's Mesh2Motion rig at the 3D cursor (or select your own Mesh2Motion-rigged armature).
+2. Select an animation in the browser. The panel shows whether the active armature matches ("Human Rig: 66/66 bones match").
+3. **Apply** sets it as the armature's action. **Push to NLA** adds it as a strip at the current frame (on the "Animation Lab" track, or a new track when that spot is taken).
+4. Tick **Mirror** first to get it with left and right swapped.
+
+Animations are copied into your file (not linked), so it keeps working without the add-on. Applying the same animation again reuses the copy. Clips are retimed to play at their real speed at your scene's frame rate. Armatures with other bone names (e.g. Mixamo) are refused with a message.
+
+*Edit → Preferences → Add-ons → Animation Lab*: thumbnail size, animations per page, and **Match Scene Frame Rate** (on by default; off keeps a clip's own frames).
 
 ## Build the library
 
@@ -57,8 +67,9 @@ Blender is found from `$BLENDER`, then `blender` on the PATH, then `/Application
 tests/run_tests.sh          # the library (inside Blender)
 tests/run_addon_tests.sh    # packages the add-on, installs it into a throwaway Blender user
                             # folder and tests the installed copy; your own Blender is not touched
-tests/take_ui_screenshot.sh shot.png [search]   # manual: opens Blender with a window for a few
-                                                # seconds and screenshots the Animation Lab tab
+tests/take_ui_screenshot.sh shot.png [search] [apply]   # manual: opens Blender with a window for
+                                                        # a few seconds and screenshots the tab;
+                                                        # "apply" also imports the rig and applies Walk
 ```
 
 The tests check that every clip of the web app is in the library, that each library holds only a clean rig, that every action is ready to use, that the catalog is valid, that the motion matches the web app (every joint within a quarter of a millimetre), and that every thumbnail shows the whole model.

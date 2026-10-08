@@ -2,7 +2,7 @@
 not saved into the user's .blend files."""
 
 import bpy
-from bpy.props import EnumProperty, IntProperty, PointerProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import PropertyGroup
 
 from . import library
@@ -72,6 +72,11 @@ class ANIMLAB_PG_state(PropertyGroup):
     )
     page: IntProperty(name="Page", min=0, default=0)
     selected: StringProperty(name="Selected Animation", description="Catalog id of the selected animation")
+    mirror: BoolProperty(
+        name="Mirror",
+        description="Apply the animation with left and right swapped",
+        default=False,
+    )
 
 
 def register():

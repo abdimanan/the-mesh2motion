@@ -1,10 +1,10 @@
-"""Animation Lab operators. Importing rigs and applying animations come in AL5."""
+"""Animation Lab operators."""
 
 import bpy
-from bpy.props import IntProperty, StringProperty
+from bpy.props import EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 
-from . import library, preferences, previews, properties
+from . import apply, library, preferences, previews, properties
 
 
 class ANIMLAB_OT_reload_library(Operator):
@@ -69,10 +69,88 @@ class ANIMLAB_OT_change_page(Operator):
         return {"FINISHED"}
 
 
+class ANIMLAB_OT_import_rig(Operator):
+    """Add the Mesh2Motion rig of this skeleton to the scene, at the 3D cursor"""
+
+    bl_idname = "animation_lab.import_rig"
+    bl_label = "Import Rig"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return library.skeleton(context.window_manager.animation_lab.skeleton) is not None and context.mode == "OBJECT"
+
+    def execute(self, context):
+        skeleton = library.skeleton(context.window_manager.animation_lab.skeleton)
+        rig = apply.import_rig(context, skeleton)
+        self.report({"INFO"}, f"Added {rig.name}")
+        return {"FINISHED"}
+
+
+class ANIMLAB_OT_apply_animation(Operator):
+    """Apply the selected animation to the active armature"""
+
+    bl_idname = "animation_lab.apply_animation"
+    bl_label = "Apply Animation"
+    bl_options = {"REGISTER", "UNDO"}
+
+    mode: EnumProperty(
+        name="Apply As",
+        items=(
+            ("ACTION", "Active Action", "Set it as the armature's action, replacing the current one"),
+            ("NLA", "NLA Strip", "Add it as a strip in the NLA Editor, starting at the current frame"),
+        ),
+        default="ACTION",
+    )
+
+    @classmethod
+    def description(cls, _context, properties_):
+        if properties_.mode == "NLA":
+            return "Add the selected animation to the active armature's NLA tracks, at the current frame"
+        return "Set the selected animation as the active armature's action"
+
+    @classmethod
+    def poll(cls, context):
+        if library.animation(context.window_manager.animation_lab.selected) is None:
+            cls.poll_message_set("Select an animation first")
+            return False
+        obj = context.active_object
+        if obj is None or obj.type != "ARMATURE":
+            cls.poll_message_set("Select an armature, or import the rig")
+            return False
+        return True
+
+    def execute(self, context):
+        state = context.window_manager.animation_lab
+        entry = library.animation(state.selected)
+        armature = context.active_object
+
+        match = apply.compatibility(armature, library.skeleton(entry["skeleton"]))
+        if not match.ok:
+            self.report({"ERROR"}, f"{armature.name}: {match.describe()}. Import the "
+                                   f"{library.skeleton(entry['skeleton'])['display_name']} rig to use this animation.")
+            return {"CANCELLED"}
+
+        scene = context.scene
+        scene_fps = round(scene.render.fps / scene.render.fps_base)
+        action = apply.get_action(entry, scene_fps, preferences.get(context).match_scene_fps, state.mirror)
+
+        if self.mode == "NLA":
+            apply.push_to_nla(armature, action, scene.frame_current)
+            where = f"NLA of {armature.name} at frame {scene.frame_current}"
+        else:
+            apply.assign(armature, action)
+            where = armature.name
+        self.report({"INFO"}, f"Applied {action.name} to {where}")
+        return {"FINISHED"}
+
+
 CLASSES = (
     ANIMLAB_OT_reload_library,
     ANIMLAB_OT_select_animation,
     ANIMLAB_OT_change_page,
+    ANIMLAB_OT_import_rig,
+    ANIMLAB_OT_apply_animation,
 )
 
 

@@ -5,12 +5,14 @@
 #
 #   tests/take_ui_screenshot.sh screenshot.png            # the browser as it opens
 #   tests/take_ui_screenshot.sh screenshot.png "walk"     # with a search
+#   tests/take_ui_screenshot.sh screenshot.png "walk" apply  # also import the rig and apply Walk
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADDON_ROOT="$(cd "$HERE/.." && pwd)"
 OUT="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 SEARCH="${2:-}"
+MODE="${3:-}"
 
 if [[ -n "${BLENDER:-}" ]]; then
   BLENDER_BIN="$BLENDER"
@@ -29,4 +31,5 @@ trap 'rm -rf "$USER_FOLDER"' EXIT
 export BLENDER_USER_RESOURCES="$USER_FOLDER"
 
 "$BLENDER_BIN" --command extension install-file --repo user_default --enable "$ZIP" >/dev/null
-"$BLENDER_BIN" --python "$HERE/ui_screenshot.py" -- "$OUT" "$SEARCH" 2>&1 | grep -E "SCREENSHOT|Error" || true
+# watchdog: Blender is stopped after 120 s whatever happens (macOS has no `timeout`)
+perl -e 'alarm 120; exec @ARGV' "$BLENDER_BIN" --python "$HERE/ui_screenshot.py" -- "$OUT" "$SEARCH" "$MODE" 2>&1 | grep -E "SCREENSHOT|FAILED|Error|Traceback|line [0-9]" || true

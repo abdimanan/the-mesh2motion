@@ -1,7 +1,7 @@
 """Add-on preferences (Edit > Preferences > Add-ons > Animation Lab)."""
 
 import bpy
-from bpy.props import FloatProperty, IntProperty
+from bpy.props import BoolProperty, FloatProperty, IntProperty
 from bpy.types import AddonPreferences
 
 from . import library
@@ -29,10 +29,18 @@ class ANIMLAB_AP_preferences(AddonPreferences):
         max=48,
     )
 
+    match_scene_fps: BoolProperty(
+        name="Match Scene Frame Rate",
+        description="Retime animations so they play at their real speed at the scene's frame rate. "
+                    "Off: keep their own frames (24, 30 or 60 fps), so they play faster or slower in other scenes",
+        default=True,
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "thumbnail_scale")
         layout.prop(self, "page_size")
+        layout.prop(self, "match_scene_fps")
 
         box = layout.box()
         box.label(text="Library", icon="ASSET_MANAGER")

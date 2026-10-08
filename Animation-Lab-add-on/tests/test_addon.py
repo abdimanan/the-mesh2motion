@@ -15,6 +15,7 @@ import unittest
 
 import addon_utils
 import bpy
+from mathutils import Vector
 
 MODULE = "bl_ext.user_default.animation_lab"
 EXPECTED_ANIMATIONS = 251
@@ -250,6 +251,181 @@ class TestInstalledAddon(unittest.TestCase):
         calls = draw(self, bpy.types.ANIMLAB_PT_skeleton.draw)
         self.assertIn(("label", "178 animations"), calls)
         self.assertIn(("label", "Human Rig, 66 bones"), calls)
+
+    # --- AL5: importing rigs and applying animations -------------------------------------
+
+    def clean_scene(self):
+        for obj in list(bpy.data.objects):
+            bpy.data.objects.remove(obj)
+        for action in list(bpy.data.actions):
+            bpy.data.actions.remove(action)
+        bpy.context.scene.render.fps = 24
+        bpy.context.scene.render.fps_base = 1
+        bpy.context.scene.frame_current = 1
+        bpy.context.window_manager.animation_lab.mirror = False
+        bpy.context.preferences.addons[MODULE].preferences.match_scene_fps = True
+
+    def import_rig(self):
+        self.assertEqual(bpy.ops.animation_lab.import_rig(), {"FINISHED"})
+        return bpy.context.active_object
+
+    def apply_selected(self, mode="ACTION"):
+        return bpy.ops.animation_lab.apply_animation(mode=mode)
+
+    def joints(self, rig, frame):
+        bpy.context.scene.frame_set(frame)
+        return {bone.name: rig.matrix_world @ bone.head for bone in rig.pose.bones}
+
+    def lab_actions(self, animation_id):
+        return [action for action in bpy.data.actions if action.get("animation_lab_id") == animation_id]
+
+    def test_import_rig(self):
+        self.clean_scene()
+        bpy.context.scene.cursor.location = (1.0, 2.0, 0.0)
+        rig = self.import_rig()
+
+        self.assertEqual(rig.type, "ARMATURE")
+        self.assertEqual(rig.name, "Human Rig")
+        self.assertEqual(len(rig.data.bones), 66)
+        self.assertEqual(tuple(rig.location), (1.0, 2.0, 0.0))
+        self.assertIsNone(rig.asset_data, "appended rigs are not left marked as assets")
+        self.assertIn(rig.name, bpy.context.scene.objects)
+        self.assertTrue(rig.select_get())
+
+        second = self.import_rig()
+        self.assertNotEqual(second, rig)
+        self.assertEqual(len([obj for obj in bpy.data.objects if obj.type == "ARMATURE"]), 2)
+        bpy.context.scene.cursor.location = (0.0, 0.0, 0.0)
+
+    def test_apply_as_active_action(self):
+        self.clean_scene()
+        rig = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+
+        self.assertEqual(self.apply_selected(), {"FINISHED"})
+        action = rig.animation_data.action
+        self.assertEqual(action.name, "Walk")
+        self.assertIsNotNone(rig.animation_data.action_slot)
+        self.assertEqual(action["animation_lab_fps"], 24)
+        self.assertEqual(tuple(round(value) for value in action.frame_range), (0, 40))
+        self.assertIsNone(action.asset_data)
+
+        # the pose really changes over the clip
+        self.assertNotEqual(self.joints(rig, 0)["hand_l"], self.joints(rig, 20)["hand_l"])
+
+        self.assertEqual(self.apply_selected(), {"FINISHED"})
+        self.assertEqual(len(self.lab_actions("human/walk")), 1, "applying again reuses the action")
+
+    def test_animation_is_retimed_to_the_scene_frame_rate(self):
+        self.clean_scene()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        at_24 = self.import_rig()
+        self.apply_selected()
+
+        bpy.context.scene.render.fps = 30
+        at_30 = self.import_rig()
+        self.apply_selected()
+
+        action = at_30.animation_data.action
+        self.assertEqual(action["animation_lab_fps"], 30)
+        self.assertEqual(tuple(round(value) for value in action.frame_range), (0, 50))  # 40 frames at 24 = 50 at 30
+        self.assertEqual(len(self.lab_actions("human/walk")), 2, "one copy per frame rate")
+
+        # the same moment (0.833 s) is frame 20 at 24 fps and frame 25 at 30 fps
+        offset = at_30.location - at_24.location
+        expected = self.joints(at_24, 20)
+        actual = self.joints(at_30, 25)
+        worst = max((actual[name] - offset - expected[name]).length for name in expected)
+        self.assertLess(worst, 1e-5)
+
+    def test_frame_rate_matching_can_be_switched_off(self):
+        self.clean_scene()
+        bpy.context.preferences.addons[MODULE].preferences.match_scene_fps = False
+        bpy.context.scene.render.fps = 30
+        rig = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        self.apply_selected()
+        self.assertEqual(tuple(round(value) for value in rig.animation_data.action.frame_range), (0, 40))
+        self.assertEqual(rig.animation_data.action["animation_lab_fps"], 24)
+
+    def test_push_to_nla(self):
+        self.clean_scene()
+        rig = self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+
+        bpy.context.scene.frame_current = 10
+        self.assertEqual(self.apply_selected("NLA"), {"FINISHED"})
+        tracks = rig.animation_data.nla_tracks
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0].name, "Animation Lab")
+        strip = tracks[0].strips[0]
+        self.assertEqual(strip.frame_start, 10)
+        self.assertEqual(strip.action.name, "Walk")
+        self.assertIsNotNone(strip.action_slot)
+
+        self.apply_selected("NLA")  # same spot: needs a new track
+        self.assertEqual(len(tracks), 2)
+
+        bpy.context.scene.frame_current = 100
+        self.apply_selected("NLA")  # free spot on the first track
+        self.assertEqual(len(tracks), 2)
+        self.assertEqual(len(tracks[0].strips), 2)
+
+    def test_mirror(self):
+        self.clean_scene()
+        apply = importlib.import_module(MODULE + ".apply")
+        for animation_id in ("human/walk", "human/dodge_left_rm"):
+            bpy.ops.animation_lab.select_animation(animation_id=animation_id)
+            bpy.context.window_manager.animation_lab.mirror = False
+            normal = self.import_rig()
+            self.apply_selected()
+            bpy.context.window_manager.animation_lab.mirror = True
+            mirrored = self.import_rig()
+            self.apply_selected()
+
+            action = mirrored.animation_data.action
+            self.assertTrue(action["animation_lab_mirrored"])
+            self.assertTrue(action.name.endswith("(mirrored)"))
+
+            start, end = (round(value) for value in action.frame_range)
+            for frame in range(start, end + 1, max(1, (end - start) // 5)):
+                left = self.joints(normal, frame)
+                right = self.joints(mirrored, frame)
+                for name, position in left.items():
+                    reflected = Vector((-position.x, position.y, position.z))
+                    self.assertLess((reflected - right[apply.mirror_bone_name(name)]).length, 0.0001,
+                                    f"{animation_id} frame {frame}: {name}")
+            for obj in (normal, mirrored):
+                bpy.data.objects.remove(obj)
+
+    def test_refuses_other_armatures(self):
+        self.clean_scene()
+        armature = bpy.data.objects.new("Some Rig", bpy.data.armatures.new("Some Rig"))
+        bpy.context.collection.objects.link(armature)
+        bpy.context.view_layer.objects.active = armature
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+
+        with self.assertRaises(RuntimeError):  # operator errors are raised when called from Python
+            self.apply_selected()
+        self.assertEqual(self.lab_actions("human/walk"), [], "nothing is added to the file")
+
+    def test_apply_needs_an_animation_and_an_armature(self):
+        self.clean_scene()
+        self.assertFalse(bpy.ops.animation_lab.apply_animation.poll(), "no armature")
+        self.import_rig()
+        self.assertFalse(bpy.ops.animation_lab.apply_animation.poll(), "no animation selected")
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        self.assertTrue(bpy.ops.animation_lab.apply_animation.poll())
+
+    def test_selection_panel_with_an_armature(self):
+        self.clean_scene()
+        self.import_rig()
+        bpy.ops.animation_lab.select_animation(animation_id="human/walk")
+        calls = draw(self, bpy.types.ANIMLAB_PT_selection.draw)
+        self.assertIn(("label", "Human Rig: 66/66 bones match"), calls)
+        self.assertIn(("operator", "animation_lab.apply_animation", "Apply"), calls)
+        self.assertIn(("set", "mode", "NLA"), calls)
+        self.assertIn(("prop", "mirror"), calls)
 
     def test_panel_draws_without_a_library(self):
         library = self.library

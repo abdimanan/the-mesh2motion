@@ -267,6 +267,7 @@ def build_skeleton(skeleton, static_dir, out_dir, rules, catalog_paths, work_dir
     report.update({
         "actions": len(entries),
         "bones": len(rig_bones),
+        "bone_names": [bone.name for bone in rig.data.bones],
         "blend_bytes": os.path.getsize(blend_path),
     })
     return entries, report
@@ -325,6 +326,9 @@ def main():
             "bones": report["bones"],
             "animations": report["actions"],
             "thumbnail": None,
+            # the add-on checks an armature against these before applying an animation
+            "position_bone": skeleton.position_bone,
+            "bone_names": report["bone_names"],
         }
         for skeleton, report in zip(skeletons, reports)
     ]
