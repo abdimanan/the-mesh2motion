@@ -1,0 +1,13 @@
+.DS_Store
+**/node_modules/
+mesh2motion-app/dist/
+
+# the original git histories of the two projects, kept locally (see README)
+.upstream-git/
+
+# Adobe Mixamo downloads, and files built on the Mixamo skeleton.
+# Kept on this computer for testing, not redistributed in a public repo.
+mesh2motion-app/docs/download animation as mixamo bone rig/T-Pose.fbx
+mesh2motion-app/docs/download animation as mixamo bone rig/Y Bot.fbx
+mesh2motion-app/docs/download animation as mixamo bone rig/mesh2motion-on-mixamo-*.fbx
+mesh2motion-app/docs/download animation as mixamo bone rig/mesh2motion-app-download_mixamo-*.fbx

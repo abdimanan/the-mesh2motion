@@ -1,0 +1,3 @@
+# ignore backup blender files
+*.blend1
+*.pyc
