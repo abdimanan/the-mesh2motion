@@ -1,0 +1,197 @@
+{
+  "_comment": "Clip name -> category. The clip name is split into lower-case words (Sword_Attack_RM -> 'sword attack rm', LayToIdle -> 'lay to idle'). Rules are tried top to bottom: a rule matches when the name starts with one of its 'prefixes', or when one of its 'keywords' starts a word ('eat' matches 'eating'). The first match wins. Clips that match nothing go to the fallback and are listed by the build so rules can be added here.",
+  "rules": [
+    {
+      "category": "Idle",
+      "prefixes": [
+        "idle"
+      ],
+      "keywords": [
+        "crouch idle"
+      ]
+    },
+    {
+      "category": "Emotes",
+      "prefixes": [
+        "dance"
+      ],
+      "keywords": []
+    },
+    {
+      "category": "Poses",
+      "keywords": [
+        "rest pose",
+        "t-pose",
+        "a-pose"
+      ]
+    },
+    {
+      "category": "Reactions",
+      "keywords": [
+        "death",
+        "die",
+        "hit",
+        "knockback",
+        "stagger",
+        "fall",
+        "lay",
+        "dizzy",
+        "dead"
+      ]
+    },
+    {
+      "category": "Weapons & Magic",
+      "keywords": [
+        "pistol",
+        "bow",
+        "spell",
+        "rifle",
+        "gun",
+        "throw",
+        "golf",
+        "fishing",
+        "blast",
+        "levitate",
+        "power up"
+      ]
+    },
+    {
+      "category": "Combat",
+      "keywords": [
+        "sword",
+        "punch",
+        "jab",
+        "melee",
+        "attack",
+        "shield",
+        "fight",
+        "kick",
+        "bite",
+        "claw",
+        "tail whip",
+        "stomp",
+        "ground pound",
+        "roar",
+        "defend",
+        "head but"
+      ]
+    },
+    {
+      "category": "Acrobatics",
+      "keywords": [
+        "jump",
+        "roll",
+        "slide",
+        "climb",
+        "backflip",
+        "flip",
+        "vault",
+        "ninja",
+        "crawl",
+        "dodge",
+        "ledge",
+        "land"
+      ]
+    },
+    {
+      "category": "Locomotion",
+      "keywords": [
+        "walk",
+        "jog",
+        "run",
+        "sprint",
+        "trot",
+        "gallop",
+        "swim",
+        "fly",
+        "flying",
+        "glide",
+        "flap",
+        "slither",
+        "strafe",
+        "crouch",
+        "turn",
+        "sneak",
+        "side winding"
+      ]
+    },
+    {
+      "category": "Emotes",
+      "keywords": [
+        "dance",
+        "yes",
+        "angry",
+        "talking",
+        "cheer",
+        "wave",
+        "clap",
+        "nod",
+        "confused",
+        "help",
+        "bow",
+        "sad",
+        "happy",
+        "laugh",
+        "point",
+        "salute",
+        "shrug",
+        "greeting",
+        "insult",
+        "reject",
+        "victory",
+        "bark",
+        "howl",
+        "rear",
+        "zombie rise",
+        "zombie scratch",
+        "zombie yell"
+      ]
+    },
+    {
+      "category": "Interaction",
+      "keywords": [
+        "sit",
+        "interact",
+        "pick",
+        "farm",
+        "chop",
+        "driving",
+        "consume",
+        "eat",
+        "drink",
+        "push",
+        "pull",
+        "fixing",
+        "chest",
+        "lantern",
+        "torch",
+        "phone",
+        "carry",
+        "rail",
+        "open",
+        "harvest",
+        "plant",
+        "water",
+        "fetch"
+      ]
+    },
+    {
+      "category": "Idle",
+      "keywords": [
+        "idle",
+        "breath",
+        "stand",
+        "rest",
+        "alert",
+        "look",
+        "coiled",
+        "sleep",
+        "meditate",
+        "shiver",
+        "tired",
+        "kneeling"
+      ]
+    }
+  ],
+  "fallback": "Other"
+}

@@ -1,0 +1,6 @@
+# the library is built from mesh2motion-app/static by tools/build_library/build.sh
+animation_lab/library/*.blend
+animation_lab/library/*.blend1
+animation_lab/library/catalog.json
+animation_lab/library/blender_assets.cats.txt
+__pycache__/
